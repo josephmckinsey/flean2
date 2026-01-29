@@ -6,129 +6,182 @@ import Mathlib.Tactic.Rify
 import Mathlib.Topology.MetricSpace.Pseudo.Defs
 import Mathlib.Analysis.Normed.Module.Basic
 
-structure DyadicPos where
-  m : ℤ
-  e : ℤ
+section
 
-def DyadicPos.interpret : DyadicPos → ℚ
-  | ⟨m, e⟩ => m / 2^e
+variable {X : Type*} {F : Type*} [PartialOrder X] [PartialOrder F]
 
+structure ValidRounder (i : X → F) (r : F → X) : Prop where
+  r_mono : Monotone r
+  i_mono : Monotone i
+  left_inverse : Function.LeftInverse r i
 
-/-!
-# Three options
+variable {r : X → F} {i : F → X}
 
-1. We can go to Dyadic as in https://leanprover-community.github.io/mathlib4_docs/Init/Data/Dyadic/Basic.html#Dyadic
-  m becomes odd, or the dyadic is 0.
-2. We can go to floating point representations where 2^prec ≤ p < 2^(prec+1)
-3. We can construct computable reals
--/
-
-def CloseToReal (m : ℤ) (e : ℤ) (x : ℝ) : Prop :=
-  |m - x * 2^(-e)| < 1
+@[simp]
+theorem ValidRounder.r_of_i_eq (approx : ValidRounder i r) (f : F) :
+    r (i f) = f := by rw [approx.left_inverse]
 
 
-def IsComputableReal (seq : ℤ → ℤ) (x : ℝ) : Prop :=
-  ∀e, CloseToReal (seq e) e x
+theorem ValidRounder.i_strictMono (approx : ValidRounder i r) : StrictMono i :=
+  Monotone.strictMono_of_injective approx.i_mono approx.left_inverse.injective
+
+def ValidRounder.id : ValidRounder (id : X → X) (id : X → X) where
+  r_mono := fun ⦃_ _⦄ h ↦ h
+  i_mono := fun ⦃_ _⦄ h ↦ h
+  left_inverse := congrFun rfl
+
+def ValidRounder.comp {F' : Type*} [PartialOrder F'] (r' : F → F') (i' : F' → F)
+    (approx : ValidRounder i r) (approx' : ValidRounder i' r')
+    : ValidRounder (i.comp i') (r'.comp r) where
+  r_mono := Monotone.comp approx'.r_mono approx.r_mono
+  i_mono := Monotone.comp approx.i_mono approx'.i_mono
+  left_inverse := Function.LeftInverse.comp approx.left_inverse approx'.left_inverse
+
+def ValidRounder.ofGaloisInsertion {conn : GaloisInsertion r i} : ValidRounder i r where
+  r_mono := conn.gc.monotone_l
+  i_mono := conn.gc.monotone_u
+  left_inverse := conn.leftInverse_l_u
+
+def ValidRounder.ofGaloisCoinsertion {conn : GaloisCoinsertion i r} : ValidRounder i r where
+  r_mono := conn.gc.monotone_u
+  i_mono := conn.gc.monotone_l
+  left_inverse := conn.u_l_leftInverse
+
+@[grind .]
+theorem ValidRounder.l_le_r_of_f_le_x (approx : ValidRounder i r) {x : X} {f : F}
+    (h : i f ≤ x) : f ≤ r x :=
+  approx.r_of_i_eq f ▸ approx.r_mono h
+
+@[grind .]
+theorem ValidRounder.r_le_f_of_x_le_f (approx : ValidRounder i r) {x : X} {f : F}
+    (h : x ≤ i f) : r x ≤ f :=
+  -- this is cute
+  approx.r_of_i_eq f ▸ approx.r_mono h
 
 
-lemma CloseToReal.eq' (m e : ℤ) (x : ℝ) : CloseToReal m e x ↔ |m * 2^e - x| < 2^e := by
-  unfold CloseToReal
-  rw [<-mul_lt_mul_iff_left₀ (by positivity : 0 < (2 : ℝ)^e), one_mul]
-  nth_rw 1 [<-abs_of_pos (by positivity : 0 < (2 : ℝ)^e)]
-  rw [<-abs_mul, sub_mul, zpow_neg, mul_assoc, inv_mul_cancel₀, mul_one]
-  positivity
+-- If x <= min F, then r x = min F.
+-- If x >= max F, then r x = max F.
 
-lemma CloseToReal.eq'' (m e : ℤ) (x : ℝ) : CloseToReal m e x ↔ dist (m * (2 : ℝ)^e) x < 2^e := by
-  rw [CloseToReal.eq', Real.dist_eq]
+-- Ceil is a GaloisInsertion (not needed)
+-- Floor is a GaloisCoinsertion (not needed)
 
-/-
-Forall x and e, there exists at most two possible values of m.
--/
-lemma closeToEq_floor_or_ceil (m e : ℤ) (x : ℝ)
-    : CloseToReal m e x ↔ m = ⌊x * 2^(-e)⌋ ∨ m = ⌈x * 2^(-e)⌉ := by
-  unfold CloseToReal
-  constructor
-  · intro h
-    suffices ⌊x * 2^(-e)⌋ = m ∨ ⌈x * 2^(-e)⌉ = m by grind only
-    rw [Int.floor_eq_iff, Int.ceil_eq_iff]
-    grind [abs_sub_lt_iff]
-  rw [abs_sub_lt_iff]
-  set s := x * 2^(-e)
-  rintro (rfl | rfl)
-  · constructor
-    · grind only [!Int.floor_le]
-    have := Int.lt_floor_add_one s
-    linarith
-  constructor
-  · grind only [Int.ceil_lt_add_one]
-  linarith [Int.le_ceil s]
+end
 
-/-
-If (m, e) is close to x, then ∃ε, m 2^e = x + ε with |ε| < 2^e
--/
-lemma CloseToReal.eq_exists_eps (m e : ℤ) (x : ℝ)
-    : CloseToReal m e x ↔ ∃ε, |ε| < (2 : ℝ)^e ∧ m * 2^e = x + ε := by
-  rw [CloseToReal.eq']
-  refine ⟨fun h ↦ ⟨m * 2^e - x, h, by simp⟩, ?_⟩
-  intro ⟨ε, h1, h2⟩
-  rw [h2, add_sub_cancel_left]
-  exact h1
+section
 
-def Int.scaleBy (n scale : ℤ) : ℤ :=
-  match scale with
-  | .ofNat s => n <<< s
-  | .negSucc s => (n >>> s + 1) >>> 1
+variable {X : Type*} {F : Type*} [PartialOrder X]
+variable [CompleteLinearOrder F] {i : F → X}
 
--- General because ℚ is the initial field for strictly ordered rings
-lemma round_div2 (x : ℤ) : round (x/(2 : ℚ)) = (x + 1) / 2 := by
-  rw [show (2 : ℤ) = ((2 : ℕ) : ℤ) by rfl]
-  rw [<-Rat.floor_intCast_div_natCast, round_eq]
+def round_down (i : F → X) : X → F :=
+  fun x ↦ sSup { f : F | i f <= x }
+
+def round_down_mono : Monotone (round_down i) := by
+  unfold round_down
+  intro x y h
+  grind only [sSup_le_sSup_of_subset_insert_bot, = Set.subset_def, = Set.mem_insert_iff,
+    usr Set.mem_setOf_eq]
+
+def round_down_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_down i) where
+  r_mono := round_down_mono
+  i_mono := i_strictMono.monotone
+  left_inverse := by
+    unfold round_down
+    intro f
+    simp_rw [i_strictMono.le_iff_le]
+    rw [Set.Iic_def]
+    exact csSup_Iic
+
+def round_up (i : F → X) : X → F :=
+  fun x ↦ sInf { f : F | x <= i f}
+
+def round_up_mono : Monotone (round_up i) := by
+  unfold round_up
+  intro x y h
+  simp only [le_sInf_iff, Set.mem_setOf_eq]
+  intro f h'
+  apply sInf_le_of_le (b := f) ?_ le_rfl
   grind
 
-theorem Int.scaleBy_eq (n scale : ℤ) : n.scaleBy scale = round (n * (2 : ℚ)^scale):= by
-  unfold Int.scaleBy
-  rcases scale with s | s
-  · simp only [shiftLeft_eq, ofNat_eq_natCast, zpow_natCast]
-    rw [show (n : ℚ) * 2^s = (n * 2 ^s : ℤ) by norm_cast]
-    exact (round_intCast (n * 2 ^ s)).symm
-  suffices (n / 2 ^ s + 1) / 2 = round (↑n * ((2 : ℚ) ^ (s + 1))⁻¹) by
-    simpa [shiftRight_eq_div_pow]
-  rw [<-round_div2]
-  rw [show (2^s : ℤ) = ((2^s : ℕ) : ℤ) by rfl]
-  rw [<-Rat.floor_intCast_div_natCast]
-  rw [pow_succ, mul_inv, <-mul_assoc, Nat.cast_pow, Nat.cast_ofNat]
-  rw [<-div_eq_mul_inv, <-div_eq_mul_inv]
-  set x := (n : ℚ) / 2^s
-  rw [round_eq, round_eq, <-add_div, <-add_div]
-  rw [show (2 : ℚ) = (2 : ℕ) by rfl]
-  rw [Int.floor_div_natCast, Int.floor_div_natCast]
-  simp
+def round_up_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_up i) where
+  r_mono := round_up_mono
+  i_mono := i_strictMono.monotone
+  left_inverse := by
+    unfold round_up
+    intro f
+    simp_rw [i_strictMono.le_iff_le]
+    rw [Set.Ici_def]
+    exact csInf_Ici
 
-theorem Int.abs_scaleBy_sub (n scale : ℤ) :
-    |n.scaleBy scale - n * (2 : ℚ)^scale| ≤ 1/2 := by
-  rw [Int.scaleBy_eq]
-  rw [abs_sub_comm]
-  exact abs_sub_round _
+@[grind! .]
+theorem validRounder_le_round_up (approx : ValidRounder i r) (x : X) :
+    r x ≤ round_up i x := by
+  unfold round_up
+  rw [@le_sInf_iff]
+  intro f h
+  simp only [Set.mem_setOf_eq] at h
+  rw [show f = r (i f) by rw [approx.r_of_i_eq]]
+  exact approx.r_mono h
 
--- Very funny
-def Int.toCompReal (n : ℤ) (prec : ℤ) : ℤ := n.scaleBy (-prec)
+@[grind! .]
+theorem round_down_le_validRounder (approx : ValidRounder i r) (x : X) :
+    round_down i x ≤ r x := by
+  unfold round_down
+  rw [@sSup_le_iff]
+  intro f h
+  simp only [Set.mem_setOf_eq] at h
+  rw [show f = r (i f) by rw [approx.r_of_i_eq]]
+  exact approx.r_mono h
 
-lemma isComputableReal_CompRealOfInt (n : ℤ) : IsComputableReal n.toCompReal n := by
-  intro prec
-  unfold CloseToReal Int.toCompReal
-  have := Int.abs_scaleBy_sub n (-prec)
-  rify at this
-  linarith
+@[grind .]
+theorem validRounder_eq_round_down_of_r_le_x (approx : ValidRounder i r) (x : X)
+    (h : i (r x) <= x) : r x = round_down i x := by
+  unfold round_down
+  apply le_antisymm
+  · exact CompleteLattice.le_sSup {f | i f ≤ x} (r x) h
+  simp_rw [sSup_le_iff, Set.mem_setOf_eq]
+  grind
 
-def CompReal.add (s1 s2 : ℤ → ℤ) (prec : ℤ) : ℤ :=
-  (s1 (prec - 1) + s2 (prec - 1)) / 4
+@[grind .]
+theorem validRounder_eq_round_up_of_x_le_r (approx : ValidRounder i r) (x : X)
+    (h : x <= i (r x)) : r x = round_up i x := by
+  unfold round_up
+  apply le_antisymm
+  · simp_rw [le_sInf_iff, Set.mem_setOf_eq]
+    grind
+  exact CompleteLattice.sInf_le {f | x ≤ i f} (r x) h
 
--- This can be better.
-def CompReal.recip (s : ℤ → ℤ) (prec : ℤ) (e : ℤ := -prec) : Option ℤ :=
-  let m := s e
-  if (2^(e + prec) : ℚ) < m^2 - 1 then
-    .some (round ((2 : ℚ)^(e + prec) / m))
-  else CompReal.recip s prec (e - 1)
-partial_fixpoint
+end
 
-def hello := "world"
+section
+
+variable {X : Type*} {F : Type*} [LinearOrder X]
+variable [CompleteLinearOrder F] {i : F → X}
+
+theorem validRounder_eq_round_up_or_round_down (approx : ValidRounder i r)
+    (x : X) : r x = round_up i x ∨ r x = round_down i x := by
+  cases le_total (i (r x)) x with
+  | inl h => grind
+  | inr h => grind
+
+-- Still need to prove that round_down and round_up are equal to floor and ceiling
+-- so we get the same lemmas for FloorRings.
+
+#check FloorRing.gc_coe_floor
+
+#check FloorRing.floor
+
+#check Real.exists_floor
+
+
+-- Why isn't grind automatically accessing the member elements of approx?
+
+-- TODO List:
+-- [ ] Invertible monotone functions are valid rounders
+-- [ ] Ring operations on rounders (addition, multiplication)
+-- [ ] Figure out why grind isn't unpacking approx elements automatically.
+-- [ ] FloorRings have round_down = floor and round_up = ceil.
+-- [ ] Minimum and maximum element lemmas
+-- [ ] Gluing operations: binary and Σ based.
+-- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
+
+end
