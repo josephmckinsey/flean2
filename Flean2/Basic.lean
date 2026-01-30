@@ -5,17 +5,18 @@ import Mathlib.Algebra.Order.Field.Power
 import Mathlib.Tactic.Rify
 import Mathlib.Topology.MetricSpace.Pseudo.Defs
 import Mathlib.Analysis.Normed.Module.Basic
+import Mathlib.Algebra.Order.Floor.Div
 
 section
 
-variable {X : Type*} {F : Type*} [PartialOrder X] [PartialOrder F]
+variable {X : Type*} {F : Type*}
 
-structure ValidRounder (i : X → F) (r : F → X) : Prop where
+structure ValidRounder [Preorder X] [Preorder F] (i : X → F) (r : F → X) : Prop where
   r_mono : Monotone r
   i_mono : Monotone i
   left_inverse : Function.LeftInverse r i
 
-variable {r : X → F} {i : F → X}
+variable {r : X → F} {i : F → X} [PartialOrder X] [PartialOrder F]
 
 @[simp]
 theorem ValidRounder.r_of_i_eq (approx : ValidRounder i r) (f : F) :
@@ -58,9 +59,11 @@ theorem ValidRounder.r_le_f_of_x_le_f (approx : ValidRounder i r) {x : X} {f : F
   -- this is cute
   approx.r_of_i_eq f ▸ approx.r_mono h
 
+theorem ValidRounder.r_le_bot [botInst : OrderBot F] (approx : ValidRounder i r) {x : X}
+    (h : x ≤ i ⊥) : r x = ⊥ := le_bot_iff.mp (r_le_f_of_x_le_f approx h)
 
--- If x <= min F, then r x = min F.
--- If x >= max F, then r x = max F.
+theorem ValidRounder.top_le_r [topInst : OrderTop F] (approx : ValidRounder i r) {x : X}
+    (h : i ⊤ ≤ x) : r x = ⊤ := top_le_iff.mp (l_le_r_of_f_le_x approx h)
 
 -- Ceil is a GaloisInsertion (not needed)
 -- Floor is a GaloisCoinsertion (not needed)
@@ -172,15 +175,62 @@ theorem validRounder_eq_round_up_or_round_down (approx : ValidRounder i r)
 
 #check Real.exists_floor
 
+end
+
+section
+
+variable {X : Type*} {F : Type*}
+variable {i : F → X}
+variable [LinearOrder X] [Semifield X] [Preorder F] [IsStrictOrderedRing X]
+
+def ValidRounder.mul (approx : ValidRounder i r) {s : X}
+    (spos : 0 < s) : ValidRounder (fun f ↦ i f * s) (fun x ↦ r (x / s)) where
+  r_mono := approx.r_mono.comp (monotone_div_right_of_nonneg (a := s) spos.le)
+  i_mono := approx.i_mono.mul_const spos.le
+  left_inverse f := by
+    dsimp
+    rw [mul_div_cancel_right₀ (i f) spos.ne.symm]
+    exact approx.left_inverse f
+
+def ValidRounder.div (approx : ValidRounder i r) {s : X}
+    (spos : 0 < s) : ValidRounder (fun f ↦ i f / s) (fun x ↦ r (x * s)) where
+  r_mono := approx.r_mono.comp (monotone_mul_right_of_nonneg (a := s) spos.le)
+  i_mono := approx.i_mono.div_const spos.le
+  left_inverse f := by
+    dsimp
+    rw [div_mul_cancel₀ (i f) spos.ne.symm]
+    exact approx.left_inverse f
+
+end
+
+section
+
+variable {X : Type*} {F : Type*}
+variable {i : F → X}
+variable [Preorder X] [Preorder F] [AddGroup X] [AddRightMono X]
+
+def ValidRounder.add (approx : ValidRounder i r) (c : X) :
+    ValidRounder (fun f ↦ i f + c) (fun x ↦ r (x - c)) where
+  r_mono := approx.r_mono.comp (fun _ _↦ (sub_le_sub_iff_right c).mpr)
+  i_mono := approx.i_mono.add_const c
+  left_inverse f := by simp [approx.left_inverse f]
+
+def ValidRounder.sub (approx : ValidRounder i r) (c : X) :
+    ValidRounder (fun f ↦ i f - c) (fun x ↦ r (x + c)) where
+  r_mono := approx.r_mono.comp add_left_mono
+  i_mono := by
+    simp_rw [sub_eq_add_neg]
+    exact approx.i_mono.add_const (-c)
+  left_inverse f := by simp [approx.left_inverse f]
+
 
 -- Why isn't grind automatically accessing the member elements of approx?
 
 -- TODO List:
--- [ ] Invertible monotone functions are valid rounders
--- [ ] Ring operations on rounders (addition, multiplication)
+-- [X] Ring operations on rounders (addition, multiplication)
 -- [ ] Figure out why grind isn't unpacking approx elements automatically.
 -- [ ] FloorRings have round_down = floor and round_up = ceil.
--- [ ] Minimum and maximum element lemmas
+-- [X] Minimum and maximum element lemmas
 -- [ ] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
 
