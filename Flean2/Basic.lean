@@ -85,11 +85,25 @@ def IsRoundDown (i : F → X) (r : X → F) : Prop :=
 def IsRoundUp (i : F → X) (r : X → F) : Prop :=
   ∀x, ∀g, (∀ f, x <= i f → g <= f) → g <= r x
 
+def ValidRounder.toGaloisInsertion (approx : ValidRounder i r) (h : ∀ x, x <= i (r x)) :
+    GaloisInsertion r i :=
+  .monotoneIntro approx.i_mono approx.r_mono h approx.left_inverse
+
+def ValidRounder.toGaloisCoinsertion (approx : ValidRounder i r) (h : ∀ x, i (r x) <= x) :
+    GaloisCoinsertion i r :=
+  .monotoneIntro approx.r_mono approx.i_mono h approx.left_inverse
+
+def IsRoundDown.of_i_r_le (h : ∀ x, i (r x) ≤ x) : IsRoundDown i r :=
+  fun x _ a ↦ a (r x) (h x)
+
+def IsRoundUp.of_le_i_r (h : ∀ x, x ≤ i (r x)) : IsRoundUp i r :=
+  fun x _ a ↦ a (r x) (h x)
+
 def IsRoundDown.ofGaloisConnection (conn : GaloisConnection i r) : IsRoundDown i r :=
-  fun x _ h ↦ h _ (conn.l_u_le x)
+  .of_i_r_le conn.l_u_le
 
 def IsRoundUp.ofGaloisConnection (conn : GaloisConnection r i) : IsRoundUp i r :=
-  fun x _ h ↦ h _ (conn.le_u_l x)
+  .of_le_i_r conn.le_u_l
 
 theorem IsRoundUp.le {r_up : X → F} (is_up : IsRoundUp i r_up)
     (approx : ValidRounder i r) (x : X) : r x ≤ r_up x :=
@@ -303,6 +317,5 @@ def IsRoundUp.ofCeil : IsRoundUp ((↑) : ℤ → X) Int.ceil :=
 -- [X] Minimum and maximum element lemmas
 -- [ ] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
--- [ ] Add subtype of F restriction as a special case
 
 end
