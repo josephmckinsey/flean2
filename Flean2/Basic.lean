@@ -48,6 +48,11 @@ def ValidRounder.ofGaloisCoinsertion (conn : GaloisCoinsertion i r) : ValidRound
   i_mono := conn.gc.monotone_l
   left_inverse := conn.u_l_leftInverse
 
+def ValidRounder.ofOrderIso (iso : OrderIso X F) : ValidRounder iso.symm iso where
+  r_mono := iso.monotone
+  i_mono := iso.symm.monotone
+  left_inverse := iso.right_inv
+
 @[grind .]
 theorem ValidRounder.f_le_r_of_f_le_x (approx : ValidRounder i r) {x : X} {f : F}
     (h : i f ≤ x) : f ≤ r x :=
@@ -65,9 +70,6 @@ theorem ValidRounder.r_le_bot [botInst : OrderBot F] (approx : ValidRounder i r)
 theorem ValidRounder.top_le_r [topInst : OrderTop F] (approx : ValidRounder i r) {x : X}
     (h : i ⊤ ≤ x) : r x = ⊤ := top_le_iff.mp (f_le_r_of_f_le_x approx h)
 
--- ValidRounder is greater than the GaloisInsertion and less than the GaloisCoinsertion
--- Ceil is a GaloisInsertion (not needed)
--- Floor is a GaloisCoinsertion (not needed)
 
 /-
 The usual definition of rounding down relies on the existence of some suprema.
@@ -84,6 +86,9 @@ def IsRoundDown (i : F → X) (r : X → F) : Prop :=
 
 def IsRoundUp (i : F → X) (r : X → F) : Prop :=
   ∀x, ∀g, (∀ f, x <= i f → g <= f) → g <= r x
+
+-- "True" Ceil is a GaloisInsertion
+-- "True" Floor is a GaloisCoinsertion
 
 def ValidRounder.toGaloisInsertion (approx : ValidRounder i r) (h : ∀ x, x <= i (r x)) :
     GaloisInsertion r i :=
@@ -317,5 +322,72 @@ def IsRoundUp.ofCeil : IsRoundUp ((↑) : ℤ → X) Int.ceil :=
 -- [X] Minimum and maximum element lemmas
 -- [ ] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
+
+end
+
+section
+
+/-
+Let 𝐹 have a cover {𝐹𝑛 }𝑛∈𝐼 such that 𝐹𝑖 ≤ 𝐹𝑗 when 𝑖 < 𝑗. We’ll have retractions 𝑟𝑛 : 𝑋 → 𝐹𝑛 , and
+a monotone selection function 𝑠 : 𝑋 → 𝐼. Assuming the inclusions are compatible and lift to 𝑖 :
+𝐹 → 𝑋 and 𝑓 ∈ 𝐹𝑠(𝑖(𝑓)) for all 𝑓 ∈ 𝐹 , then 𝑟(𝑥) ≔ 𝑟𝑠(𝑥) (𝑥) is a retraction.
+For Lean, we will be dealing with 𝐹𝑛 which have monotone inclusions into 𝐹 instead, which slightly
+𝑔𝑛
+complicates the proof. Luckily (𝑓 : 𝐹 ) → 𝐹𝑠(𝑖(𝑓)) → 𝐹 for provides an explicit surjectivity
+requirement, cutting down on the assumptions still.
+-/
+
+structure GlueData (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
+    [Preorder F] (i : F → X) : Type where
+  Fj : ι → Set F
+  separation (i j : ι) (h : i < j) (x y : F) (h : x ∈ Fj i) (h' : y ∈ Fj j) : x ≤ y
+  s : X → ι
+  s_spec : ∀f, f ∈ Fj (s (i f))
+  s_mono : Monotone s
+  rj : (j : ι) → (X → Fj j)
+  approx_i : ∀j, ValidRounder ((Fj j).restrict i) (rj j)
+
+structure GlueData' (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
+    [Preorder F] (i : F → X) : Type 1 where
+  Fj : ι → Type
+  Fj_preorder : ∀{j}, Preorder (Fj j)
+  gj : {j : ι} → Fj j  → F
+  gj_strictMono : ∀j, StrictMono (gj (j := j))
+  separation (i j : ι) (h : i < j) (x : Fj i) (y : Fj j) : gj x ≤ gj y
+  s : X → ι
+  s_spec : ∀f, ∃f' : Fj (s (i f)), gj f' = f -- could decompose the choice function
+  s_mono : Monotone s
+  rj : (j : ι) → (X → Fj j)
+  ij : {j : ι} → (Fj j → X)
+  ij_compat : ∀j f, ij (j := j) f = i (gj f)
+  approx_i : ∀j, ValidRounder ij (rj j)
+
+structure WeakGlueData (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
+    [Preorder F] (i : F → X) : Type 1 where
+  Fj : ι → Set F
+  separation (i j : ι) (h : i < j) (x y : F) (h : x ∈ Fj i) (h' : y ∈ Fj j) : x ≤ y
+  s : X → ι
+  s_spec : ∀f, ∃f' ∈ Fj (s (i f)), i f = i f' -- could decompose the choice function
+  s_mono : Monotone s
+  rj : (j : ι) → (X → Fj j)
+  approx_i : ∀j, ValidRounder ((Fj j).restrict i) (rj j)
+
+end
+
+section
+
+def round_near_int (q : ℚ) :=
+  let i1 := ⌊q⌋
+  let i2 := ⌈q⌉
+  if Int.fract q < 1/2 then
+    i1
+  else if 1/2 < Int.fract q then
+    i2
+  else if i1 % 2 = 0 then
+    i1
+  else
+    i2
+
+
 
 end
