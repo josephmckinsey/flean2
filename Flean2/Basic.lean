@@ -6,6 +6,7 @@ import Mathlib.Tactic.Rify
 import Mathlib.Topology.MetricSpace.Pseudo.Defs
 import Mathlib.Analysis.Normed.Module.Basic
 import Mathlib.Algebra.Order.Floor.Div
+import Flean2.RoundNearest
 
 section
 
@@ -322,6 +323,7 @@ def IsRoundUp.ofCeil : IsRoundUp ((↑) : ℤ → X) Int.ceil :=
 -- [X] Minimum and maximum element lemmas
 -- [ ] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
+-- [ ] Bound with an interval
 
 end
 
@@ -376,18 +378,15 @@ end
 
 section
 
-def round_near_int (q : ℚ) :=
-  let i1 := ⌊q⌋
-  let i2 := ⌈q⌉
-  if Int.fract q < 1/2 then
-    i1
-  else if 1/2 < Int.fract q then
-    i2
-  else if i1 % 2 = 0 then
-    i1
-  else
-    i2
+variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
 
+def validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near where
+  r_mono := round_near_monotone
+  i_mono := Int.cast_mono
+  left_inverse := round_near_leftInverse
 
+def validRounder_fixedPoint (prec : ℕ) := validRounder_round_near.div (
+  show 0 < (2 : X)^(prec) by norm_num
+)
 
 end

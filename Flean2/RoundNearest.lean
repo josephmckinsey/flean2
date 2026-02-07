@@ -1,17 +1,23 @@
+module
+
 import Mathlib.Data.Rat.Defs
 import Mathlib.Data.Rat.Floor
 import Mathlib.Tactic.Positivity.Core
 import Mathlib.Tactic.Zify
 import Mathlib.Tactic.Qify
+public import Mathlib.Order.Monotone.Defs
+public import Mathlib.Algebra.Group.Defs
+public import Mathlib.Algebra.Order.Floor.Defs
+public import Mathlib.Algebra.Field.Defs
 
 variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
 
-def round_near (q : X) : ℤ :=
+public def round_near (q : X) : ℤ :=
   let i1 := ⌊q⌋
   let i2 := ⌈q⌉
-  if Int.fract q < 1/2 then
+  if Int.fract q < 2⁻¹ then
     i1
-  else if 1/2 < Int.fract q then
+  else if 2⁻¹ < Int.fract q then
     i2
   else if i1 % 2 = 0 then
     i1
@@ -31,7 +37,7 @@ If Int.frac q1 < 1/2, then we round to ⌊q1⌋,
 and
 -/
 
-lemma round_near_monotone : Monotone (round_near (X := X)) := by
+public lemma round_near_monotone : Monotone (round_near (X := X)) := by
   intro x y h
   by_cases xy_eq : x = y
   · exact (congrArg round_near xy_eq).le
@@ -43,20 +49,21 @@ lemma round_near_monotone : Monotone (round_near (X := X)) := by
     (Int.cast_le (R := X)).1 <|
       (Int.floor_le x).trans <| h.trans  <| Int.le_ceil y
   by_cases h' : ⌈x⌉ ≤ ⌊y⌋
-  · grind
+  · grind -- a lot of annoying casework using local hypotheses
   replace h' := show ⌊y⌋ < ⌈x⌉ by simpa using h'
   have floor_y_eq_floor_x : ⌊y⌋ = ⌊x⌋ :=
     le_antisymm (Int.le_floor.mpr (Int.lt_ceil.mp h').le)
       (Int.floor_le_floor h)
   -- Essentially floor_y_eq_floor_x ▸ sub_lt_sub_right h ↑⌊x⌋
-  have fract_x_lt_fract_y : Int.fract x < Int.fract y := by grind [Int.fract]
-  grind  -- It's all casework from here.
+  have fract_x_lt_fract_y : Int.fract x < Int.fract y := by grind only [Int.fract]
+  grind only -- It's all casework from here.
 
-lemma round_near_eq_of (x : X) (z : ℤ) (h1 : z - 1 / 2 < x) (h2 : x < z + 1 / 2) :
-    z = round_near x := by
+@[grind .]
+public lemma round_near_eq_of (x : X) (z : ℤ) (h1 : z - 2⁻¹ < x) (h2 : x < z + 2⁻¹) :
+    round_near x = z := by
   if h3 : z ≤ x then
-    have : Int.fract x = x - z := Int.fract_eq_iff.mpr (by grind)
-    grind only [round_near, !Int.floor_eq_iff]
+    have : Int.fract x = x - z := Int.fract_eq_iff.mpr (by grind only)
+    grind [round_near, Int.floor_eq_iff]
   else
     replace h3 := lt_of_not_ge h3
     have floor_eq : ⌊x⌋ = z - 1 := by
@@ -72,32 +79,39 @@ lemma fract_eq_ceil_of_pos {q : X} (h : 0 < Int.fract q) :
   Int.fract q = q + 1 - ⌈q⌉ := by
   grind [Int.fract_eq_zero_or_add_one_sub_ceil]
 
-lemma round_near_le (q : X) :
+public lemma round_near_le (q : X) :
   |round_near q - q| ≤ 1/2 := by
   unfold round_near
   grind only [abs_sub_comm, abs_of_nonneg, fract_eq_ceil_of_pos, !Int.fract_nonneg,
     !Int.le_ceil, !Int.self_sub_floor]
 
-lemma round_near_of_int (z : ℤ) : round_near (z : X) = z := by
-  simp [round_near, Int.fract_intCast]
+public lemma round_near_leftInverse : Function.LeftInverse round_near ((↑) : ℤ → X) :=
+  fun x => by simp [round_near, Int.fract_intCast]
 
-lemma round_near_add_half (z : ℤ) (h : z % 2 = 0) :
-  round_near ((z : X) + 1/2) = z := by
+@[simp, grind =]
+public lemma round_near_of_int (z : ℤ) : round_near (z : X) = z :=
+  round_near_leftInverse z
+
+
+@[simp, grind =]
+public lemma round_near_add_half (z : ℤ) (h : z % 2 = 0) :
+  round_near ((z : X) + 2⁻¹) = z := by
   unfold round_near
   have t1 : Int.fract 2⁻¹ = (2⁻¹ : X) := by norm_num
   have t2 : ⌊(2⁻¹ : X)⌋ = 0 := by norm_num
   grind only [Int.fract_intCast_add, Int.floor_intCast_add]
 
-lemma round_near_sub_half (z : ℤ) (h : z % 2 = 0) :
-  round_near ((z : X) - 1/2) = z := by
+@[simp, grind =]
+public lemma round_near_sub_half (z : ℤ) (h : z % 2 = 0) :
+  round_near ((z : X) - 2⁻¹) = z := by
   have t1 : Int.fract (-2⁻¹) = (2⁻¹ : X) := by norm_num
   have t2 : ⌊(-2⁻¹ : X)⌋ = -1 := by norm_num
   have t3 : ⌈(-2⁻¹ : X)⌉ = 0 := by norm_num
   unfold round_near
   grind only [sub_eq_add_neg, Int.fract_intCast_add, Int.floor_intCast_add, Int.ceil_intCast_add]
 
-lemma round_of_add_half (z : ℤ) : round_near ((z : X) + 1/2) % 2 = 0 := by
-  rw [round_near, show Int.fract (z + 1/2 : X) = 1/2 by norm_num]
+public lemma round_of_add_half (z : ℤ) : round_near ((z : X) + 2⁻¹) % 2 = 0 := by
+  rw [round_near, show Int.fract (z + 2⁻¹ : X) = 2⁻¹ by norm_num]
   have : ⌈(2⁻¹ : X)⌉ = 1 := by norm_num
   have : ⌊(2⁻¹ : X)⌋ = 0 := by norm_num
   grind [Int.floor_intCast_add, Int.ceil_intCast_add]
