@@ -12,7 +12,7 @@ section
 
 variable {X : Type*} {F : Type*}
 
-structure ValidRounder [Preorder X] [Preorder F] (i : X → F) (r : F → X) : Prop where
+structure ValidRounder [Preorder X] [Preorder F] (i : F → X) (r : X → F) : Prop where
   r_mono : Monotone r
   i_mono : Monotone i
   left_inverse : Function.LeftInverse r i
@@ -232,84 +232,114 @@ end
 
 section
 
-variable {X : Type*} {F : Type*} [LinearOrder X] [PartialOrder F] {i : F → X}
+variable {X : Type*} {F : Type*} [Preorder X] [Preorder F]
 
-variable [DecidableLE X]
+structure PartialRounder (i : F → X) (r : X → F) (s : Set X) (t : Set F) : Prop where
+  r_mono : MonotoneOn r s
+  i_mono : MonotoneOn i t
+  left_inverse : Set.LeftInvOn r i t
+  r_map : s.MapsTo r t
+  i_map : t.MapsTo i s
 
-def ValidRounder.round_a_le [DecidableLE X] (approx : ValidRounder i r) (a : F)
-    (x : X) : { f : F // a ≤ f} :=
-  if h : i a ≤ x then
-    ⟨r x, approx.f_le_r_of_f_le_x h⟩
-  else
-    ⟨a, le_refl a⟩
+variable {i : F → X} {r : X → F} {s : Set X} {t : Set F}
 
-
-def ValidRounder.round_a_le_mono (approx : ValidRounder i r) (a : F) :
-    Monotone (approx.round_a_le a) := by
-  intro x y h
-  unfold ValidRounder.round_a_le
-  have h' : i a ≤ x ∨ x < i a := le_or_gt (i a) x
-  have h'' : i a ≤ y ∨ y < i a := le_or_gt (i a) y
-  grind [Subtype.mk_le_mk, approx.r_mono h]
-
-
-def ValidRounder.of_a_le [DecidableLE X] (approx : ValidRounder i r) (a : F) :
-    ValidRounder (i ∘ (↑) : { f : F // a ≤ f } → X) (approx.round_a_le a) where
-  r_mono := approx.round_a_le_mono a
-  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
-  left_inverse := fun ⟨x, h⟩ ↦ by
-    simp [ValidRounder.round_a_le, approx.i_mono h, approx.left_inverse x]
-
--- This should probably be proved with some sort of dual thingy
-
-def ValidRounder.round_le_b [DecidableLE X] (approx : ValidRounder i r) (b : F)
-    (x : X) : { f : F // f ≤ b } :=
-  if h : x ≤ i b then
-    ⟨r x, approx.r_le_f_of_x_le_f h⟩
-  else
-    ⟨b, le_refl b⟩
-
-def ValidRounder.round_le_b_mono (approx : ValidRounder i r) (b : F) :
-    Monotone (approx.round_le_b b) := by
-  intro x y h
-  unfold ValidRounder.round_le_b
-  have h' : i b ≤ x ∨ x < i b := le_or_gt (i b) x
-  have h'' : i b ≤ y ∨ y < i b := le_or_gt (i b) y
-  grind [Subtype.mk_le_mk, approx.r_mono h]
-
-def ValidRounder.of_le_b [DecidableLE X] (approx : ValidRounder i r) (b : F) :
-    ValidRounder (i ∘ (↑) : { f : F // f ≤ b } → X) (approx.round_le_b b) where
-  r_mono := approx.round_le_b_mono b
-  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
-  left_inverse := fun ⟨x, h⟩ ↦ by
-    simp [ValidRounder.round_le_b, approx.i_mono h, approx.left_inverse x]
-
-def ValidRounder.round_a_le_b [DecidableLE X] (approx : ValidRounder i r) {a b : F}
-    (h : a ≤ b) (x : X) : { f : F // a ≤ f ∧ f ≤ b } :=
-  if h' : i a ≤ x then
-    --⟨r x, approx.f_le_r_of_f_le_x h⟩
-    if h'' : x ≤ i b then
-      ⟨r x, approx.f_le_r_of_f_le_x h', approx.r_le_f_of_x_le_f h''⟩
-    else
-      ⟨b, h, le_refl b⟩
-  else
-    ⟨a, le_refl a, h⟩
-
-def ValidRounder.of_a_le_b [DecidableLE X] (approx : ValidRounder i r) {a b : F}
-    (h : a ≤ b) : ValidRounder (i ∘ (↑)) (approx.round_a_le_b h) where
+def PartialRounder.restrict (approx : PartialRounder i r s t) :
+    ValidRounder approx.i_map.restrict approx.r_map.restrict where
   r_mono := by
-    have comp : Monotone _ := approx.i_mono.comp ((approx.of_le_b b).of_a_le ⟨a, h⟩).r_mono
-    apply StrictMono.comp
+    intro ⟨x, xh⟩ ⟨y, yh⟩
+    rw [Subtype.mk_le_mk, Subtype.mk_le_mk]
+    exact approx.r_mono xh yh
+  i_mono := by
+    intro ⟨x, xh⟩ ⟨y, yh⟩
+    rw [Subtype.mk_le_mk, Subtype.mk_le_mk]
+    exact approx.i_mono xh yh
+  left_inverse := by
+    intro ⟨x, xh⟩
+    rw [Subtype.mk.injEq]
+    exact approx.left_inverse xh
 
-    convert comp using 1
-    apply Iff.of_eq
-    congr 1
-    · apply type_eq_of_heq
-    simp [ValidRounder.round_a_le] at this
-    convert this
-  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
-  left_inverse := fun ⟨x, h⟩ ↦ by
-    simp [ValidRounder.round_le_b, approx.i_mono h, approx.left_inverse x]
+def ValidRounder.toPartialRounderOfImageEq (approx : ValidRounder i r) (h : s.MapsTo r t)
+    (h' : t.MapsTo i s) : PartialRounder i r s t where
+  r_mono := Monotone.monotoneOn approx.r_mono s
+  i_mono := Monotone.monotoneOn approx.i_mono t
+  left_inverse x _ := approx.left_inverse x
+  r_map _ xh := Set.mem_preimage.mp (h xh)
+  i_map _ fh := Set.mem_preimage.mp (h' fh)
+
+def ValidRounder.iff_PartialRounder : ValidRounder i r ↔ PartialRounder i r .univ .univ where
+  mpr approx := {
+    r_mono := monotoneOn_univ.mp approx.r_mono
+    i_mono := monotoneOn_univ.mp approx.i_mono
+    left_inverse := fun f ↦ approx.left_inverse (Set.mem_univ f)
+  }
+  mp approx := {
+    r_mono := approx.r_mono.monotoneOn _
+    i_mono := approx.i_mono.monotoneOn _
+    left_inverse x _ := approx.left_inverse x
+    r_map x _ := Set.mem_univ (r x)
+    i_map f _ := Set.mem_univ (i f)
+  }
+
+theorem PartialRounder.r_s_eq_t (approx : PartialRounder i r s t) : r '' s = t :=
+  subset_antisymm (Set.image_subset_iff.mpr approx.r_map)
+    fun f fh ↦ ⟨i f, approx.i_map fh, approx.left_inverse fh⟩
+
+
+/-
+def PartialRounder.mono {s₂ : Set X} {t₂ : Set F} (approx : PartialRounder i r s t)
+    (h : s₂ ⊆ s) (h' : t₂ ⊆ t) : PartialRounder i r s₂ t₂ where
+  r_mono := sorry
+  i_mono := sorry
+  left_inverse := sorry
+  r_map := sorry
+  i_map := approx.i_map.mono h' h
+
+-/
+
+
+end
+
+section
+
+variable {X : Type*} {F : Type*} [PartialOrder X] [PartialOrder F]
+
+variable {i : F → X} {r : X → F} {s : Set X} {t : Set F}
+
+def MonotoneOn.union_lowerBound {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t1 t2}
+    (le2 : t1 ⊆ lowerBounds t2) (mono1 : MonotoneOn r s1) (mono2 : MonotoneOn r s2)
+    (map1 : s1.MapsTo r t1) (map2 : s2.MapsTo r t2) :
+    MonotoneOn r (s1 ∪ s2) := by
+  intro x xh y yh h
+  rw [Set.mem_union] at xh
+  rw [Set.mem_union] at yh
+  rcases xh with (xh | xh) <;> rcases yh with (yh| yh)
+  · exact mono1 xh yh h
+  · exact le2 (map1 xh) (map2 yh)
+  · rw [le_antisymm h (le1 yh xh)]
+  exact mono2 xh yh h
+
+def PartialRounder.union {s1 s2 : Set X} (h : s1 ⊆ lowerBounds s2) {t1 t2}
+    (h' : t1 ⊆ lowerBounds t2) (a1 : PartialRounder i r s1 t1)
+    (a2 : PartialRounder i r s2 t2) : PartialRounder i r (s1 ∪ s2) (t1 ∪ t2) where
+  r_mono := .union_lowerBound h h' a1.r_mono a2.r_mono a1.r_map a2.r_map
+  i_mono := .union_lowerBound h' h a1.i_mono a2.i_mono a1.i_map a2.i_map
+  left_inverse x := by
+    rintro (xh | xh)
+    · exact a1.left_inverse xh
+    · exact a2.left_inverse xh
+  r_map := a1.r_map.union_union a2.r_map
+  i_map := a1.i_map.union_union a2.i_map
+
+def PartialRounder.iUnion {ι : Type*} [Preorder ι] {s : ι → Set X} {t : ι → Set F}
+    (s_mono : ∀ i j, i < j → s i ⊆ lowerBounds (s j))
+    (t_mono : ∀ i j, i < j → t i ⊆ lowerBounds (t j))
+    (ha : ∀ j : ι, PartialRounder i r (s j) (t j)) :
+    PartialRounder i r (⋃ j, s j) (⋃ j, t j) where
+  r_mono := sorry
+  i_mono := sorry
+  left_inverse := sorry
+  r_map := sorry
+  i_map := sorry
 
 
 end
