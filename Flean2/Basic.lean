@@ -234,16 +234,33 @@ section
 
 variable {X : Type*} {F : Type*} [Preorder X] [Preorder F]
 
-structure PartialRounder (i : F → X) (r : X → F) (s : Set X) (t : Set F) : Prop where
+structure PartialRounder (i : F → X) (r : X → F) (s : Set X) : Prop where
   r_mono : MonotoneOn r s
-  i_mono : MonotoneOn i t
-  left_inverse : Set.LeftInvOn r i t
-  r_map : s.MapsTo r t
-  i_map : t.MapsTo i s
+  i_mono : MonotoneOn i (r '' s)
+  left_inverse : Set.LeftInvOn r i (r '' s)
+  i_r_map : s.MapsTo (i ∘ r) s
 
-variable {i : F → X} {r : X → F} {s : Set X} {t : Set F}
+variable {i : F → X} {r : X → F} {s : Set X}
 
-def PartialRounder.restrict (approx : PartialRounder i r s t) :
+def PartialRounder.i_map (approx : PartialRounder i r s) : (r '' s).MapsTo i s :=
+  Set.mapsTo_image_iff.mpr approx.i_r_map
+
+def PartialRounder.r_map (_ : PartialRounder i r s) : s.MapsTo r (r '' s) :=
+  Set.mapsTo_image r s
+
+def PartialRounder.ofMapTo {i : F → X} {r : X → F} {s : Set X} {t : Set F}
+    (r_mono : MonotoneOn r s) (i_mono : MonotoneOn i t)
+    (left_inverse : Set.LeftInvOn r i t) (i_map : t.MapsTo i s) (r_map : s.MapsTo r t)
+    : PartialRounder i r s where
+  r_mono := r_mono
+  i_mono := r_s_eq_t ▸ i_mono
+  left_inverse := r_s_eq_t ▸ left_inverse
+  i_r_map := Set.MapsTo.comp i_map r_map
+  where
+    r_s_eq_t := subset_antisymm (Set.image_subset_iff.mpr r_map)
+      fun f fh ↦ ⟨i f, i_map fh, left_inverse fh⟩
+
+def PartialRounder.restrict (approx : PartialRounder i r s) :
     ValidRounder approx.i_map.restrict approx.r_map.restrict where
   r_mono := by
     intro ⟨x, xh⟩ ⟨y, yh⟩
@@ -258,44 +275,32 @@ def PartialRounder.restrict (approx : PartialRounder i r s t) :
     rw [Subtype.mk.injEq]
     exact approx.left_inverse xh
 
-def ValidRounder.toPartialRounderOfImageEq (approx : ValidRounder i r) (h : s.MapsTo r t)
-    (h' : t.MapsTo i s) : PartialRounder i r s t where
+def ValidRounder.toPartialRounderOfMapTo (approx : ValidRounder i r)
+    (h : s.MapsTo (i ∘ r) s) : PartialRounder i r s where
   r_mono := Monotone.monotoneOn approx.r_mono s
-  i_mono := Monotone.monotoneOn approx.i_mono t
+  i_mono := Monotone.monotoneOn approx.i_mono (r '' s)
   left_inverse x _ := approx.left_inverse x
-  r_map _ xh := Set.mem_preimage.mp (h xh)
-  i_map _ fh := Set.mem_preimage.mp (h' fh)
+  i_r_map := h
 
-def ValidRounder.iff_PartialRounder : ValidRounder i r ↔ PartialRounder i r .univ .univ where
-  mpr approx := {
-    r_mono := monotoneOn_univ.mp approx.r_mono
-    i_mono := monotoneOn_univ.mp approx.i_mono
-    left_inverse := fun f ↦ approx.left_inverse (Set.mem_univ f)
-  }
-  mp approx := {
-    r_mono := approx.r_mono.monotoneOn _
-    i_mono := approx.i_mono.monotoneOn _
-    left_inverse x _ := approx.left_inverse x
-    r_map x _ := Set.mem_univ (r x)
-    i_map f _ := Set.mem_univ (i f)
-  }
+def ValidRounder.toPartialRounderOfMapTo' {t : Set F} (approx : ValidRounder i r)
+    (r_map : s.MapsTo r t) (i_map : t.MapsTo i s) : PartialRounder i r s :=
+  approx.toPartialRounderOfMapTo (i_map.comp r_map)
 
-theorem PartialRounder.r_s_eq_t (approx : PartialRounder i r s t) : r '' s = t :=
-  subset_antisymm (Set.image_subset_iff.mpr approx.r_map)
-    fun f fh ↦ ⟨i f, approx.i_map fh, approx.left_inverse fh⟩
+def ValidRounder.toPartialRounder (approx : ValidRounder i r) : PartialRounder i r .univ :=
+  approx.toPartialRounderOfMapTo (Set.mapsTo_univ _ _)
 
+def PartialRounder.toValidRounder (approx : PartialRounder i r .univ)
+    (h : Function.Surjective r) : ValidRounder i r where
+  r_mono := monotoneOn_univ.mp approx.r_mono
+  i_mono := monotoneOn_univ.mp ((Set.image_univ_of_surjective h) ▸ approx.i_mono)
+  left_inverse x := approx.left_inverse (Set.image_univ_of_surjective h ▸ Set.mem_univ x)
 
-/-
-def PartialRounder.mono {s₂ : Set X} {t₂ : Set F} (approx : PartialRounder i r s t)
-    (h : s₂ ⊆ s) (h' : t₂ ⊆ t) : PartialRounder i r s₂ t₂ where
-  r_mono := sorry
-  i_mono := sorry
-  left_inverse := sorry
-  r_map := sorry
-  i_map := approx.i_map.mono h' h
-
--/
-
+def PartialRounder.mono {s' : Set X} (approx : PartialRounder i r s)
+    (h : s' ⊆ s) (h' : s'.MapsTo (i ∘ r) s') : PartialRounder i r s' where
+  r_mono := approx.r_mono.mono h
+  i_mono := approx.i_mono.mono (Set.image_mono h)
+  left_inverse := approx.left_inverse.mono (Set.image_mono h)
+  i_r_map := h'
 
 end
 
@@ -303,7 +308,7 @@ section
 
 variable {X : Type*} {F : Type*} [PartialOrder X] [PartialOrder F]
 
-variable {i : F → X} {r : X → F} {s : Set X} {t : Set F}
+variable {i : F → X} {r : X → F}
 
 def MonotoneOn.union_lowerBound {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t1 t2}
     (le2 : t1 ⊆ lowerBounds t2) (mono1 : MonotoneOn r s1) (mono2 : MonotoneOn r s2)
@@ -318,29 +323,27 @@ def MonotoneOn.union_lowerBound {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t
   · rw [le_antisymm h (le1 yh xh)]
   exact mono2 xh yh h
 
-def PartialRounder.union {s1 s2 : Set X} (h : s1 ⊆ lowerBounds s2) {t1 t2}
-    (h' : t1 ⊆ lowerBounds t2) (a1 : PartialRounder i r s1 t1)
-    (a2 : PartialRounder i r s2 t2) : PartialRounder i r (s1 ∪ s2) (t1 ∪ t2) where
+def PartialRounder.union {s1 s2 : Set X} (h : s1 ⊆ lowerBounds s2)
+    (h' : (r '' s1) ⊆ lowerBounds (r '' s2)) (a1 : PartialRounder i r s1)
+    (a2 : PartialRounder i r s2) : PartialRounder i r (s1 ∪ s2) where
   r_mono := .union_lowerBound h h' a1.r_mono a2.r_mono a1.r_map a2.r_map
-  i_mono := .union_lowerBound h' h a1.i_mono a2.i_mono a1.i_map a2.i_map
+  i_mono := Set.image_union r s1 s2 ▸
+      .union_lowerBound h' h a1.i_mono a2.i_mono a1.i_map a2.i_map
   left_inverse x := by
+    rw [Set.image_union]
     rintro (xh | xh)
     · exact a1.left_inverse xh
     · exact a2.left_inverse xh
-  r_map := a1.r_map.union_union a2.r_map
-  i_map := a1.i_map.union_union a2.i_map
+  i_r_map := a1.i_r_map.union_union a2.i_r_map
 
 def PartialRounder.iUnion {ι : Type*} [Preorder ι] {s : ι → Set X} {t : ι → Set F}
     (s_mono : ∀ i j, i < j → s i ⊆ lowerBounds (s j))
-    (t_mono : ∀ i j, i < j → t i ⊆ lowerBounds (t j))
-    (ha : ∀ j : ι, PartialRounder i r (s j) (t j)) :
-    PartialRounder i r (⋃ j, s j) (⋃ j, t j) where
+    (ha : ∀ j : ι, PartialRounder i r (s j)) :
+    PartialRounder i r (⋃ j, s j) where
   r_mono := sorry
   i_mono := sorry
   left_inverse := sorry
-  r_map := sorry
-  i_map := sorry
-
+  i_r_map := sorry
 
 end
 
