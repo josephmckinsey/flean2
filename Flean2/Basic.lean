@@ -54,12 +54,12 @@ def ValidRounder.ofOrderIso (iso : OrderIso X F) : ValidRounder iso.symm iso whe
   i_mono := iso.symm.monotone
   left_inverse := iso.right_inv
 
-@[grind .]
+--@[grind .]
 theorem ValidRounder.f_le_r_of_f_le_x (approx : ValidRounder i r) {x : X} {f : F}
     (h : i f ≤ x) : f ≤ r x :=
   approx.r_of_i_eq f ▸ approx.r_mono h
 
-@[grind .]
+--@[grind .]
 theorem ValidRounder.r_le_f_of_x_le_f (approx : ValidRounder i r) {x : X} {f : F}
     (h : x ≤ i f) : r x ≤ f :=
   -- this is cute
@@ -227,6 +227,90 @@ theorem validRounder_eq_round_up_or_round_down (approx : ValidRounder i r)
   cases le_total (i (r x)) x with
   | inl h => grind
   | inr h => grind
+
+end
+
+section
+
+variable {X : Type*} {F : Type*} [LinearOrder X] [PartialOrder F] {i : F → X}
+
+variable [DecidableLE X]
+
+def ValidRounder.round_a_le [DecidableLE X] (approx : ValidRounder i r) (a : F)
+    (x : X) : { f : F // a ≤ f} :=
+  if h : i a ≤ x then
+    ⟨r x, approx.f_le_r_of_f_le_x h⟩
+  else
+    ⟨a, le_refl a⟩
+
+
+def ValidRounder.round_a_le_mono (approx : ValidRounder i r) (a : F) :
+    Monotone (approx.round_a_le a) := by
+  intro x y h
+  unfold ValidRounder.round_a_le
+  have h' : i a ≤ x ∨ x < i a := le_or_gt (i a) x
+  have h'' : i a ≤ y ∨ y < i a := le_or_gt (i a) y
+  grind [Subtype.mk_le_mk, approx.r_mono h]
+
+
+def ValidRounder.of_a_le [DecidableLE X] (approx : ValidRounder i r) (a : F) :
+    ValidRounder (i ∘ (↑) : { f : F // a ≤ f } → X) (approx.round_a_le a) where
+  r_mono := approx.round_a_le_mono a
+  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
+  left_inverse := fun ⟨x, h⟩ ↦ by
+    simp [ValidRounder.round_a_le, approx.i_mono h, approx.left_inverse x]
+
+-- This should probably be proved with some sort of dual thingy
+
+def ValidRounder.round_le_b [DecidableLE X] (approx : ValidRounder i r) (b : F)
+    (x : X) : { f : F // f ≤ b } :=
+  if h : x ≤ i b then
+    ⟨r x, approx.r_le_f_of_x_le_f h⟩
+  else
+    ⟨b, le_refl b⟩
+
+def ValidRounder.round_le_b_mono (approx : ValidRounder i r) (b : F) :
+    Monotone (approx.round_le_b b) := by
+  intro x y h
+  unfold ValidRounder.round_le_b
+  have h' : i b ≤ x ∨ x < i b := le_or_gt (i b) x
+  have h'' : i b ≤ y ∨ y < i b := le_or_gt (i b) y
+  grind [Subtype.mk_le_mk, approx.r_mono h]
+
+def ValidRounder.of_le_b [DecidableLE X] (approx : ValidRounder i r) (b : F) :
+    ValidRounder (i ∘ (↑) : { f : F // f ≤ b } → X) (approx.round_le_b b) where
+  r_mono := approx.round_le_b_mono b
+  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
+  left_inverse := fun ⟨x, h⟩ ↦ by
+    simp [ValidRounder.round_le_b, approx.i_mono h, approx.left_inverse x]
+
+def ValidRounder.round_a_le_b [DecidableLE X] (approx : ValidRounder i r) {a b : F}
+    (h : a ≤ b) (x : X) : { f : F // a ≤ f ∧ f ≤ b } :=
+  if h' : i a ≤ x then
+    --⟨r x, approx.f_le_r_of_f_le_x h⟩
+    if h'' : x ≤ i b then
+      ⟨r x, approx.f_le_r_of_f_le_x h', approx.r_le_f_of_x_le_f h''⟩
+    else
+      ⟨b, h, le_refl b⟩
+  else
+    ⟨a, le_refl a, h⟩
+
+def ValidRounder.of_a_le_b [DecidableLE X] (approx : ValidRounder i r) {a b : F}
+    (h : a ≤ b) : ValidRounder (i ∘ (↑)) (approx.round_a_le_b h) where
+  r_mono := by
+    have comp : Monotone _ := approx.i_mono.comp ((approx.of_le_b b).of_a_le ⟨a, h⟩).r_mono
+    apply StrictMono.comp
+
+    convert comp using 1
+    apply Iff.of_eq
+    congr 1
+    · apply type_eq_of_heq
+    simp [ValidRounder.round_a_le] at this
+    convert this
+  i_mono := approx.i_mono.comp (Subtype.mono_coe _)
+  left_inverse := fun ⟨x, h⟩ ↦ by
+    simp [ValidRounder.round_le_b, approx.i_mono h, approx.left_inverse x]
+
 
 end
 
