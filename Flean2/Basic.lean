@@ -6,6 +6,7 @@ import Mathlib.Tactic.Rify
 import Mathlib.Topology.MetricSpace.Pseudo.Defs
 import Mathlib.Analysis.Normed.Module.Basic
 import Mathlib.Algebra.Order.Floor.Div
+import Mathlib.Data.Int.Log
 import Flean2.RoundNearest
 
 section
@@ -306,11 +307,11 @@ end
 
 section
 
-variable {X : Type*} {F : Type*} [PartialOrder X] [PartialOrder F]
+variable {X : Type*} {F : Type*} [PartialOrder X]
 
 variable {i : F → X} {r : X → F}
 
-def MonotoneOn.union_lowerBound {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t1 t2}
+def MonotoneOn.union_lowerBound [Preorder F] {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t1 t2}
     (le2 : t1 ⊆ lowerBounds t2) (mono1 : MonotoneOn r s1) (mono2 : MonotoneOn r s2)
     (map1 : s1.MapsTo r t1) (map2 : s2.MapsTo r t2) :
     MonotoneOn r (s1 ∪ s2) := by
@@ -322,6 +323,8 @@ def MonotoneOn.union_lowerBound {s1 s2 : Set X} (le1 : s1 ⊆ lowerBounds s2) {t
   · exact le2 (map1 xh) (map2 yh)
   · rw [le_antisymm h (le1 yh xh)]
   exact mono2 xh yh h
+
+variable [PartialOrder F] -- needed for i
 
 def PartialRounder.union {s1 s2 : Set X} (h : s1 ⊆ lowerBounds s2)
     (h' : (r '' s1) ⊆ lowerBounds (r '' s2)) (a1 : PartialRounder i r s1)
@@ -431,6 +434,157 @@ def IsRoundDown.ofFloor : IsRoundDown ((↑) : ℤ → X) Int.floor :=
 def IsRoundUp.ofCeil : IsRoundUp ((↑) : ℤ → X) Int.ceil :=
   .ofGaloisConnection Int.gc_ceil_coe
 
+end
+
+section
+
+variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
+
+def validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near where
+  r_mono := round_near_monotone
+  i_mono := Int.cast_mono
+  left_inverse := round_near_leftInverse
+
+def validRounder_fixedPoint (e : ℤ) := validRounder_round_near.mul (
+  show 0 < (2 : X)^e by positivity
+)
+
+/-
+TODO: m 2^e with 2^prec <= m < 2^(prec+1)
+TODO: Make a round_fixed_point
+-/
+
+def mantissaPartialRounder_round_near (e : ℤ) (prec : ℕ) :
+    PartialRounder (fun f ↦ ↑f * 2^e : ℤ → X) (fun x ↦ round_near (x / 2^e) : X → ℤ)
+    (Set.Icc ((2 : X)^(prec + e)) (2^(prec + e + 1))) := by
+  rw [show (2 : X)^(prec + e) = (2^prec : ℤ) * (2 : X)^e by
+    rw [zpow_add₀ (by norm_num)]
+    simp,
+    show (2 : X)^(prec + e + 1) = (2^(prec + 1): ℤ) * (2 : X)^e by
+    rw [add_assoc, add_comm e 1, <-add_assoc, zpow_add₀ (by norm_num)]
+    norm_cast
+  ]
+  have approx := validRounder_fixedPoint e (X := X)
+  exact ValidRounder.toPartialRounderOfMapTo approx fun x xh ↦
+    ⟨approx.i_mono (approx.f_le_r_of_f_le_x xh.1),
+    approx.i_mono (approx.r_le_f_of_x_le_f xh.2)⟩
+
+def round_near_e_and_succ (e : ℤ) (prec : ℕ) := fun (x : X) ↦ if x < 2^(prec + e + 1) then
+    (round_near (x / 2^e), e) -- TODO: add normalization here?
+  else
+    (round_near (x / 2^(e+1)), e + 1)
+
+structure DyadicPair where
+  m : ℤ
+  e : ℤ
+
+instance [Field k] : Coe DyadicPair k where
+  coe x := x.m * (2 : k)^x.e
+
+def normalize_edge (prec : ℕ) : DyadicPair → DyadicPair := fun ⟨m, e⟩ ↦
+  if m = 2^(prec+1) then ⟨2^prec, e + 1⟩ else ⟨m, e⟩
+
+theorem normalize_edge_cast_comm [Field k] [NeZero (2 : k)] (prec : ℕ) (f : DyadicPair) :
+    ((normalize_edge prec f) : k) = f := by
+  unfold normalize_edge
+  if h : f.m = 2^(prec + 1) then
+    simp only [h, reduceIte, Int.cast_pow, Int.cast_ofNat]
+    rw [pow_add, zpow_add₀ two_ne_zero]
+    field_simp
+  else
+    simp_rw [if_neg h]
+
+theorem normalize_edge_ne2prec [Field k] [NeZero (2 : k)] (prec : ℕ) (f : DyadicPair) :
+    (normalize_edge prec f).m ≠ 2^(prec+1) := by
+  unfold normalize_edge
+  grind [pow_right_inj₀]
+
+
+def round_near_all (prec : ℕ) := fun (x : X) ↦
+  let e := Int.log 2 x - prec
+  -- 2^(e + prec) <= x < 2^(e + prec + 1) for x ≠ 0
+  -- So 2^prec <= round_near (x / 2^e) <= 2^(prec + 1)
+  -- Normalization trims off the edge to [2^prec, 2^(prec + 1))
+  normalize_edge prec ⟨round_near (x / 2^e), e⟩
+
+theorem round_near_all_mantissa (prec : ℕ) (x : X) :
+    2^prec <= (round_near_all prec x).m ∧ (round_near_all prec x).m < 2^(prec + 1) := by sorry
+
+-- For each i f ∈ X_i, there is a f' ∈ r_i '' X_i s.t. i' f' = i f.
+-- We need to take each f and assign it the original f' in X_i for all X_i that its a part of.
+-- They should agree on their intersections essentially.
+-- ι → F → Fi (here Fi are actually types (in our case ℤ))
+
+-- (m, e) → 2^(e+prec) <= m 2^e <= 2^(e+prec+1), and f ∈ r '' Xj, so we can choose
+-- round_near (x / 2^e), which can then use normalization to show is equal. Details
+-- are fuzzy, especially in the general case.
+
+-- i r = i' r' on each X_i instead of having a selection function directly.
+-- We need the partial order on F still for the i to be mono, but we could also
+-- just assert i is mono since it's obvious.
+-- This lets us get i r i = i, and then we can use the strict nature of i to remove it.
+-- i r i f = i' r' i f = i' r' i' f' = i' f' = i f
+
+-- Since r' i' f = f, then i r (i' f) = i' r' i' f = i' f,
+
+
+-- This is a proof by cases on the boundary.
+theorem round_near_all_at_places (prec : ℕ) (e : ℤ) (x : X)
+    (h : 2 ^ (e + prec) <= x ∧ x ≤ 2 ^ (e + prec + 1)) :
+    (round_near_all prec x : X) = (round_near (x / 2^e) : X) := by sorry
+
+
+
+-- PartialRounder i (round_near (x / 2^e), e) should be equivalent to PartialRounder i round_near (...)
+-- with a fixed e on the interval [2^prec, 2^(prec + 1)] since there is an invertible map
+-- between r '' [2^prec, 2^(prec+1)] and r1 '' [2^prec, 2^(prec + 1)]
+-- φ ∘ r = r1
+--
+
+-- This one is a partial order.
+structure NormalNumber (p : ℕ) extends DyadicPair where
+  bound : 2^p <= m ∧ m < 2^(p + 1) := by norm_num
+
+attribute [coe] NormalNumber.toDyadicPair
+instance {p : ℕ} : CoeHead (NormalNumber p) DyadicPair := ⟨NormalNumber.toDyadicPair⟩
+
+instance : PartialOrder (NormalNumber p) where
+  le := sorry
+  le_refl := sorry
+  le_trans := sorry
+  le_antisymm := sorry
+
+#check ((.mk ⟨4, 0⟩ : NormalNumber 2) : ℝ)
+
+#check NormalNumber.toDyadicPair
+
+def round_near_all' (prec : ℕ) (x : X) : NormalNumber prec :=
+  ⟨round_near_all prec x, round_near_all_mantissa prec x⟩
+
+
+-- I would like to prove that round_near_all' is a valid rounder on
+-- union e, 2^(e + prec) <= x <= 2^(e + prec + 1) = (0, infty)
+-- Our monotone selection function Int.log 2 x - prec is monotone on (0, infty)
+-- First, we remove the normalization step.
+-- Looking at [2^(e+prec), 2^(e+prec+1)], our rounder inherits
+-- monotonicity from the individual rounders.
+-- Since i maps to (0, infty), our i_r_map property is satisfied.
+-- Now for r (i f), we have that i (r (i f)) = i f for each [2^(e+prec), 2^(e+prec+1)]
+-- by removing the normalization. Since i is injective on NormalNumbers, we then have
+-- that r (i f) = f.
+
+
+-- Finally, we can compose with
+
+-- Now we want to glue these together, so we want to take
+-- round_near_exp e and round_near (e+1) and glue them together.
+-- which should be possible as long as i is monotone everywhere and s1 <= s2
+
+-- TODO: Do we need IsRoundUpOn and IsRoundDownOn?
+-- TODO: Do we need that gluing preserves IsRoundUp and IsRoundDown?
+
+end
+
 -- Why isn't grind automatically accessing the member elements of approx?
 
 -- TODO List:
@@ -441,8 +595,6 @@ def IsRoundUp.ofCeil : IsRoundUp ((↑) : ℤ → X) Int.ceil :=
 -- [ ] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
 -- [ ] Bound with an interval
-
-end
 
 section
 
@@ -458,28 +610,86 @@ requirement, cutting down on the assumptions still.
 
 structure GlueData (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
     [Preorder F] (i : F → X) : Type where
-  Fj : ι → Set F
+  Fj : ι → Set F -- Fj = r '' Xj
+  Xj : ι → Set X
   separation (i j : ι) (h : i < j) (x y : F) (h : x ∈ Fj i) (h' : y ∈ Fj j) : x ≤ y
   s : X → ι
   s_spec : ∀f, f ∈ Fj (s (i f))
   s_mono : Monotone s
-  rj : (j : ι) → (X → Fj j)
-  approx_i : ∀j, ValidRounder ((Fj j).restrict i) (rj j)
+  rj : ι → (X → F)
+  approx_i : ∀j, PartialRounder i (rj j) (Xj j)
+
+def glue_round (rj : ι → X → F) (s : X → ι) : X → F := fun x ↦ rj (s x) x
+
+
+theorem t [Preorder X] [Preorder F] {s : X → ι} (Xj : ι → Set X)
+    {rj : ι → X → F} (approx_i : ∀ j, PartialRounder i (rj j) (Xj j))
+    {f : F} (fh : f ∈ rj (s (i f)) '' Xj (s (i f)))
+    :  i ((glue_round rj s) (i f)) = i f := by
+  unfold glue_round
+  have := (approx_i (s (i f))).left_inverse fh
+  sorry
+    /-
+    MonotoneOn (glue_round rj s) (s⁻¹' {j} ∩ Xj j) := by
+  apply MonotoneOn.congr ((monotone_i ))
+    where
+  r_mono := by
+    apply MonotoneOn.congr ((approx_i j).r_mono.mono Set.inter_subset_right)
+    intro x xh
+    unfold glue_round
+    rw [show s x = j by grind]
+  i_mono := by
+    have : (glue_round rj s '' (s ⁻¹' {j} ∩ Xj j)) ⊆ (rj j '' Xj j) := by grind [glue_round]
+    apply MonotoneOn.congr ((approx_i j).i_mono.mono this)
+    unfold glue_round
+    intro f fh
+    simp only
+  left_inverse f fh := by -- not true
+    have t := (approx_i j).left_inverse
+    have : f ∈ rj j '' Xj j := by grind [glue_round]
+    replace t := t this
+    have : i f ∈ Xj j := by apply (approx_i j).i_map this
+    have t' := (approx_i j).i_r_map this
+    --simp [] at t'
+    unfold glue_round
+    -- For each f ∈ rj j '' Xj j, f ∈ rj (s (i f)) '' Xj (s (i f))
+    have : s (i f) = j := by
+      unfold glue_round at fh
+      simp at fh
+    rw [this, t]
+  i_r_map := sorry
+
+
+
+
+structure GlueData'' (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
+    [Preorder F] (i : F → X) : Type where
+  Fj : ι → Set F -- Fj = r '' Xj
+  Xj : ι → Set X
+  separation (i j : ι) (h : i < j) (x y : F) (h : x ∈ Fj i) (h' : y ∈ Fj j) : x ≤ y
+  s : X → ι
+  s_spec : ∀f, f ∈ Fj (s (i f))
+  s_mono : Monotone s
+  rj : ι → (X → F)
+  approx_i : ∀j, PartialRounder i (rj j) (Xj j)
+
+
+-/
 
 structure GlueData' (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
     [Preorder F] (i : F → X) : Type 1 where
+  r : X → F
+  i : F → X
+  Xj : ι → Set X
   Fj : ι → Type
-  Fj_preorder : ∀{j}, Preorder (Fj j)
-  gj : {j : ι} → Fj j  → F
-  gj_strictMono : ∀j, StrictMono (gj (j := j))
-  separation (i j : ι) (h : i < j) (x : Fj i) (y : Fj j) : gj x ≤ gj y
-  s : X → ι
-  s_spec : ∀f, ∃f' : Fj (s (i f)), gj f' = f -- could decompose the choice function
-  s_mono : Monotone s
   rj : (j : ι) → (X → Fj j)
-  ij : {j : ι} → (Fj j → X)
-  ij_compat : ∀j f, ij (j := j) f = i (gj f)
-  approx_i : ∀j, ValidRounder ij (rj j)
+  ij : (j : ι) → (Fj j → X)
+  separation (i j : ι) (h : i < j) (x y : X) (h : x ∈ Xj i) (h' : x ∈ Xj j) : x ≤ y
+  agreement : ∀j, ∀x ∈ Xj j, i (r x) = ij j (rj j x)
+  pick_f : (j : ι) → (f : F) → (h : f ∈ r '' (Xj j)) → Fj j
+  pick_f_spec : ∀j f h, ij j (pick_f j f h) = i f
+  Fj_preorder : ∀{j}, Preorder (Fj j)
+  approx_i : ∀j, PartialRounder (ij j) (rj j) (Xj j)
 
 structure WeakGlueData (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Type)
     [Preorder F] (i : F → X) : Type 1 where
@@ -493,17 +703,17 @@ structure WeakGlueData (ι : Type) [Preorder ι] (X : Type) [Preorder X] (F : Ty
 
 end
 
-section
+-- If i (r (i f)) = i f, and r' (i' f') = f', then
+--
+-- i i' r' r i i' f
 
-variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
+-- If I have a weak rounder X → F, then I replace F with i '' F.
+-- Now I just need to show that my "normalized" version is isomorphic to i '' F.
+-- So let φ : F → F', then i'(φ(f)) = i(f) and φ is monotone
+-- with a right inverse φ⁻¹ and monotone i'.
 
-def validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near where
-  r_mono := round_near_monotone
-  i_mono := Int.cast_mono
-  left_inverse := round_near_leftInverse
+-- Then i' (φ r) i' f' = i r i' f' = i r i' φ φ⁻¹ f' = i r i φ⁻¹ f' = i φ⁻¹ f' = i' φ φ⁻¹ f = i' f
+-- So we get our weak gluing property again.
 
-def validRounder_fixedPoint (prec : ℕ) := validRounder_round_near.div (
-  show 0 < (2 : X)^(prec) by norm_num
-)
 
-end
+-- Alternatively, I could try and show our gluing property, where we try and show that
