@@ -326,6 +326,21 @@ def MonotoneOn.union_lowerBound [Preorder F] {s1 s2 : Set X} (le1 : s1 ⊆ lower
   · rw [le_antisymm h (le1 yh xh)]
   exact mono2 xh yh h
 
+def MonotoneOn.iUnion_lowerBound {ι : Type*} [LinearOrder ι]
+    [Preorder F] {s : ι → Set X} (s_mono : ∀ i j, i < j → s i ⊆ lowerBounds (s j))
+    {t : ι → Set F} (t_mono : ∀ i j, i < j → t i ⊆ lowerBounds (t j))
+    (r_mono_i : ∀ i, MonotoneOn r (s i)) (r_map : ∀ i, (s i).MapsTo r (t i)) :
+    MonotoneOn r (⋃ i, s i) := by
+  intro x xh y yh h
+  rw [Set.mem_iUnion] at xh yh
+  rcases xh with ⟨i, xh⟩
+  rcases yh with ⟨j, yh⟩
+  rcases lt_trichotomy i j with h' | h' | h'
+  · exact t_mono i j h' (r_map i xh) (r_map j yh)
+  · exact r_mono_i i xh (h' ▸ yh) h
+  rw [le_antisymm h (s_mono j i h' yh xh)]
+
+
 variable [PartialOrder F] -- needed for i
 
 def PartialRounder.union {s1 s2 : Set X} (h : s1 ⊆ lowerBounds s2)
@@ -918,11 +933,86 @@ theorem round_normal_interp [Field X] [LinearOrder X]
     round_near_all_at_places p f.e _ (by grind [NormalNumber.interp_bound]),
     f.interp_e_proj, (validRounder_round_near_e (X := X) f.e).left_inverse f.m]
 
+theorem interp_round_near_all_image [Field X] [LinearOrder X]
+    [IsStrictOrderedRing X] [FloorRing X] (p : ℕ) {x : X} {i : ℤ}
+    (h : x ∈ Set.Icc (2 ^ i) (2 ^ (i + 1))) :
+    (round_near_normal p x).interp X ∈ Set.Icc (2 ^ i) (2 ^ (i + 1)) := by
+  have xpos : 0 < x := lt_of_lt_of_le (by positivity) h.1
+  rw [round_near_normal_eq _ xpos, round_near_all_at_places p (i - p)]
+  · have : round_near_e (i - p) x ∈ Set.Icc (2 ^ p) (2 ^ (p + 1)) := by
+      rw [<-round_near_e_image (e := i - p) p (X := X)]
+      use x
+      simpa
+    rw [interp_e]
+    set m := round_near_e (i - p) x
+    -- There's _some_ overlap here with interp_bound
+    constructor
+    · rw [zpow_sub₀ (by norm_num), mul_div, le_div_iff₀' (by positivity)]
+      apply (mul_le_mul_iff_left₀ (by positivity)).mpr
+      exact_mod_cast this.1
+    rw [zpow_sub₀ (by norm_num), mul_div, div_le_iff₀' (by positivity),
+      add_comm, zpow_add₀ (by positivity), <-mul_assoc, <-zpow_add₀ (by positivity)]
+    apply (mul_le_mul_iff_left₀ (by positivity)).mpr
+    exact_mod_cast this.2
+  simp only [sub_add_cancel]
+  exact h
+
+theorem Ioi_zero_eq_iUnion_Ico_zpow [Field X] [LinearOrder X]
+    [IsStrictOrderedRing X] [Archimedean X] {b : X} (hy : 1 < b) :
+    Set.Ioi 0 = ⋃ n : ℤ, Set.Ico ((b : X) ^ n) (b ^ (n + 1)) := by
+  ext x
+  simp only [Set.mem_iUnion, Set.mem_Ioi, Set.mem_Ico]
+  exact ⟨fun xh ↦ exists_mem_Ico_zpow xh (by norm_cast),
+    fun ⟨n, xh'⟩ ↦ lt_of_lt_of_le (by positivity) xh'.1⟩
+
+theorem Ioi_zero_eq_iUnion_Icc_zpow [Field X] [LinearOrder X]
+    [IsStrictOrderedRing X] [Archimedean X] {b : X} (hy : 1 < b) :
+    Set.Ioi 0 = ⋃ n : ℤ, Set.Icc ((b : X) ^ n) (b ^ (n + 1)) := by
+  apply subset_antisymm (Ioi_zero_eq_iUnion_Ico_zpow hy ▸
+      Set.iUnion_mono (fun i ↦ Set.Ico_subset_Icc_self))
+  intro n
+  rw [Set.mem_iUnion]
+  exact fun ⟨i, h⟩ ↦ lt_of_lt_of_le (by positivity) h.1
+
+theorem zpow_lowerBounds [Field X] [LinearOrder X] [IsStrictOrderedRing X] {i j : ℤ}
+    (h : i < j) : Set.Icc ((2 : X) ^ i) (2 ^ (i + 1)) ⊆
+    lowerBounds (Set.Icc (2 ^ j) (2 ^ (j + 1))) :=
+  fun _ xh _ yh ↦ xh.2.trans ((zpow_le_zpow_right₀ (by norm_num) h).trans yh.1)
+
+-- TODO: clean up
 theorem round_normal_monoOn [Field X] [LinearOrder X]
     [IsStrictOrderedRing X] [FloorRing X] (p : ℕ) :
     MonotoneOn (round_near_normal p) (Set.Ioi (0 : X)) := by
-  --apply MonotoneOn.union_lowerBound
-  sorry
+  rw [Ioi_zero_eq_iUnion_Icc_zpow (b := (2 : X)) (by norm_num)]
+  apply MonotoneOn.iUnion_lowerBound
+    (t := fun e ↦ round_near_normal p '' Set.Icc ((2 : X)^e) (2^(e+1)))
+  case s_mono =>
+    apply zpow_lowerBounds
+  · intro i j h
+    have := zpow_lowerBounds h (X := X)
+    intro f ⟨x, xh⟩ f' ⟨y, yh⟩
+    rw [NormalNumber.le_def X]
+    rw [<-xh.2, <-yh.2]
+    apply this
+    · apply interp_round_near_all_image _ xh.1
+    apply interp_round_near_all_image _ yh.1
+  · intro i x xh y yh h
+    rw [NormalNumber.le_def X]
+    have xpos : 0 < x := lt_of_lt_of_le (by positivity) xh.1
+    have ypos : 0 < y := lt_of_lt_of_le (by positivity) yh.1
+    rw [round_near_normal_eq _ xpos, round_near_all_at_places p (i - p) x (by simpa)]
+    rw [round_near_normal_eq _ ypos, round_near_all_at_places p (i - p) y (by simpa)]
+    exact (validRounder_round_near_e _).i_mono ((validRounder_round_near_e _).r_mono h)
+  exact fun i ↦ Set.mapsTo_image (round_near_normal p) (Set.Icc (2 ^ i) (2 ^ (i + 1)))
+
+def partialRounder_round_near_normal [Field X] [LinearOrder X]
+    [IsStrictOrderedRing X] [FloorRing X] (p : ℕ) :
+    PartialRounder (NormalNumber.interp X) (round_near_normal p) (Set.Ioi 0) where
+  r_mono := round_normal_monoOn p
+  i_mono := (NormalNumber.interp_strictMono X).monotone.monotoneOn _
+  left_inverse := (round_normal_interp p).leftInvOn _
+  i_r_map := fun _ _  ↦ NormalNumber.interp_pos _ _
+
 -- If i (r (i f)) = i f, and r' (i' f') = f', then
 --
 -- i i' r' r i i' f
