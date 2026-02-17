@@ -15,7 +15,7 @@ section
 
 variable {X : Type*} {F : Type*}
 
-structure ValidRounder [Preorder X] [Preorder F] (i : F → X) (r : X → F) : Prop where
+class ValidRounder [Preorder X] [Preorder F] (i : F → X) (r : X → F) : Prop where
   r_mono : Monotone r
   i_mono : Monotone i
   left_inverse : Function.LeftInverse r i
@@ -23,14 +23,13 @@ structure ValidRounder [Preorder X] [Preorder F] (i : F → X) (r : X → F) : P
 variable {r : X → F} {i : F → X} [PartialOrder X] [PartialOrder F]
 
 @[simp]
-theorem ValidRounder.r_of_i_eq (approx : ValidRounder i r) (f : F) :
+theorem ValidRounder.r_of_i_eq [approx : ValidRounder i r] (f : F) :
     r (i f) = f := by rw [approx.left_inverse]
 
-
-theorem ValidRounder.i_strictMono (approx : ValidRounder i r) : StrictMono i :=
+theorem ValidRounder.i_strictMono [approx : ValidRounder i r] : StrictMono i :=
   Monotone.strictMono_of_injective approx.i_mono approx.left_inverse.injective
 
-def ValidRounder.id : ValidRounder (id : X → X) (id : X → X) where
+instance ValidRounder.id : ValidRounder (id : X → X) (id : X → X) where
   r_mono := fun ⦃_ _⦄ h ↦ h
   i_mono := fun ⦃_ _⦄ h ↦ h
   left_inverse := congrFun rfl
@@ -58,21 +57,21 @@ def ValidRounder.ofOrderIso (iso : OrderIso X F) : ValidRounder iso.symm iso whe
   left_inverse := iso.right_inv
 
 --@[grind .]
-theorem ValidRounder.f_le_r_of_f_le_x (approx : ValidRounder i r) {x : X} {f : F}
+theorem ValidRounder.f_le_r_of_f_le_x [approx : ValidRounder i r] {x : X} {f : F}
     (h : i f ≤ x) : f ≤ r x :=
   approx.r_of_i_eq f ▸ approx.r_mono h
 
 --@[grind .]
-theorem ValidRounder.r_le_f_of_x_le_f (approx : ValidRounder i r) {x : X} {f : F}
+theorem ValidRounder.r_le_f_of_x_le_f [approx : ValidRounder i r] {x : X} {f : F}
     (h : x ≤ i f) : r x ≤ f :=
   -- this is cute
   approx.r_of_i_eq f ▸ approx.r_mono h
 
-theorem ValidRounder.r_le_bot [botInst : OrderBot F] (approx : ValidRounder i r) {x : X}
-    (h : x ≤ i ⊥) : r x = ⊥ := le_bot_iff.mp (r_le_f_of_x_le_f approx h)
+theorem ValidRounder.r_le_bot [botInst : OrderBot F] [approx : ValidRounder i r] {x : X}
+    (h : x ≤ i ⊥) : r x = ⊥ := le_bot_iff.mp (approx.r_le_f_of_x_le_f h)
 
-theorem ValidRounder.top_le_r [topInst : OrderTop F] (approx : ValidRounder i r) {x : X}
-    (h : i ⊤ ≤ x) : r x = ⊤ := top_le_iff.mp (f_le_r_of_f_le_x approx h)
+theorem ValidRounder.top_le_r [topInst : OrderTop F] [approx : ValidRounder i r] {x : X}
+    (h : i ⊤ ≤ x) : r x = ⊤ := top_le_iff.mp (approx.f_le_r_of_f_le_x h)
 
 
 /-
@@ -94,11 +93,11 @@ def IsRoundUp (i : F → X) (r : X → F) : Prop :=
 -- "True" Ceil is a GaloisInsertion
 -- "True" Floor is a GaloisCoinsertion
 
-def ValidRounder.toGaloisInsertion (approx : ValidRounder i r) (h : ∀ x, x <= i (r x)) :
+def ValidRounder.toGaloisInsertion [approx : ValidRounder i r] (h : ∀ x, x <= i (r x)) :
     GaloisInsertion r i :=
   .monotoneIntro approx.i_mono approx.r_mono h approx.left_inverse
 
-def ValidRounder.toGaloisCoinsertion (approx : ValidRounder i r) (h : ∀ x, i (r x) <= x) :
+def ValidRounder.toGaloisCoinsertion [approx : ValidRounder i r] (h : ∀ x, i (r x) <= x) :
     GaloisCoinsertion i r :=
   .monotoneIntro approx.r_mono approx.i_mono h approx.left_inverse
 
@@ -123,7 +122,7 @@ theorem IsRoundDown.le {r_down : X → F} (is_down : IsRoundDown i r_down)
   is_down x _ (fun _ a ↦ approx.f_le_r_of_f_le_x a)
 
 @[grind .]
-theorem validRounder_eq_round_down_of_r_le_x (approx : ValidRounder i r) (x : X)
+theorem validRounder_eq_round_down_of_r_le_x [approx : ValidRounder i r] (x : X)
     {r' : X → F} (approx_down : ValidRounder i r') (is_down : IsRoundDown i r')
     (h : i (r x) <= x) : r x = r' x :=
   le_antisymm
@@ -131,18 +130,18 @@ theorem validRounder_eq_round_down_of_r_le_x (approx : ValidRounder i r) (x : X)
     (is_down x _ (fun _ a ↦ approx.f_le_r_of_f_le_x a))
 
 @[grind .]
-theorem validRounder_eq_round_up_of_x_le_r (approx : ValidRounder i r) (x : X)
+theorem validRounder_eq_round_up_of_x_le_r [approx : ValidRounder i r] (x : X)
     {r' : X → F} (approx_up : ValidRounder i r') (is_up : IsRoundUp i r')
     (h : x <= i (r x)) : r x = r' x :=
   le_antisymm
     (is_up x _ (fun _ a ↦ approx.r_le_f_of_x_le_f a))
     (approx_up.r_le_f_of_x_le_f h)
 
-theorem IsRoundUp.unique {r r' : X → F} (approx : ValidRounder i r) (is_up : IsRoundUp i r)
+theorem IsRoundUp.unique {r r' : X → F} [approx : ValidRounder i r] (is_up : IsRoundUp i r)
     (approx' : ValidRounder i r') (is_up' : IsRoundUp i r') : r = r' :=
   funext fun x ↦ le_antisymm (is_up'.le approx x) (is_up.le approx' x)
 
-theorem IsRoundDown.unique {r r' : X → F} (approx : ValidRounder i r) (is_down : IsRoundDown i r)
+theorem IsRoundDown.unique {r r' : X → F} [approx : ValidRounder i r] (is_down : IsRoundDown i r)
     (approx' : ValidRounder i r') (is_down' : IsRoundDown i r') : r = r' :=
   funext fun x ↦ le_antisymm (is_down.le approx' x) (is_down'.le approx x)
 
@@ -172,7 +171,7 @@ def round_down_mono : Monotone (round_down i) := by
   grind only [sSup_le_sSup_of_subset_insert_bot, = Set.subset_def, = Set.mem_insert_iff,
     usr Set.mem_setOf_eq]
 
-def round_down_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_down i) where
+instance round_down_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_down i) where
   r_mono := round_down_mono
   i_mono := i_strictMono.monotone
   left_inverse := by
@@ -193,7 +192,7 @@ def round_up_mono : Monotone (round_up i) := by
   apply sInf_le_of_le (b := f) ?_ le_rfl
   grind
 
-def round_up_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_up i) where
+instance round_up_ValidRounder (i_strictMono : StrictMono i) : ValidRounder i (round_up i) where
   r_mono := round_up_mono
   i_mono := i_strictMono.monotone
   left_inverse := by
@@ -207,12 +206,12 @@ def round_up_IsRoundUp : IsRoundUp i (round_up i) :=
   fun _ _ h ↦ le_sInf h
 
 @[grind! .]
-theorem validRounder_le_round_up (approx : ValidRounder i r) (x : X) :
+theorem validRounder_le_round_up [approx : ValidRounder i r] (x : X) :
     r x ≤ round_up i x :=
   round_up_IsRoundUp.le approx x
 
 @[grind! .]
-theorem round_down_le_validRounder (approx : ValidRounder i r) (x : X) :
+theorem round_down_le_validRounder [approx : ValidRounder i r] (x : X) :
     round_down i x ≤ r x :=
   round_down_IsRoundDown.le approx x
 
@@ -237,7 +236,7 @@ section
 
 variable {X : Type*} {F : Type*} [Preorder X] [Preorder F]
 
-structure PartialRounder (i : F → X) (r : X → F) (s : Set X) : Prop where
+class PartialRounder (i : F → X) (r : X → F) (s : Set X) : Prop where
   r_mono : MonotoneOn r s
   i_mono : MonotoneOn i (r '' s)
   left_inverse : Set.LeftInvOn r i (r '' s)
@@ -245,10 +244,10 @@ structure PartialRounder (i : F → X) (r : X → F) (s : Set X) : Prop where
 
 variable {i : F → X} {r : X → F} {s : Set X}
 
-def PartialRounder.i_map (approx : PartialRounder i r s) : (r '' s).MapsTo i s :=
+def PartialRounder.i_map [approx : PartialRounder i r s] : (r '' s).MapsTo i s :=
   Set.mapsTo_image_iff.mpr approx.i_r_map
 
-def PartialRounder.r_map (_ : PartialRounder i r s) : s.MapsTo r (r '' s) :=
+def PartialRounder.r_map [_approx : PartialRounder i r s] : s.MapsTo r (r '' s) :=
   Set.mapsTo_image r s
 
 def PartialRounder.ofMapTo {i : F → X} {r : X → F} {s : Set X} {t : Set F}
@@ -263,7 +262,7 @@ def PartialRounder.ofMapTo {i : F → X} {r : X → F} {s : Set X} {t : Set F}
     r_s_eq_t := subset_antisymm (Set.image_subset_iff.mpr r_map)
       fun f fh ↦ ⟨i f, i_map fh, left_inverse fh⟩
 
-def PartialRounder.restrict (approx : PartialRounder i r s) :
+def PartialRounder.restrict [approx : PartialRounder i r s] :
     ValidRounder approx.i_map.restrict approx.r_map.restrict where
   r_mono := by
     intro ⟨x, xh⟩ ⟨y, yh⟩
@@ -278,21 +277,21 @@ def PartialRounder.restrict (approx : PartialRounder i r s) :
     rw [Subtype.mk.injEq]
     exact approx.left_inverse xh
 
-def ValidRounder.toPartialRounderOfMapTo (approx : ValidRounder i r)
+def ValidRounder.toPartialRounderOfMapTo [approx : ValidRounder i r]
     (h : s.MapsTo (i ∘ r) s) : PartialRounder i r s where
   r_mono := Monotone.monotoneOn approx.r_mono s
   i_mono := Monotone.monotoneOn approx.i_mono (r '' s)
   left_inverse x _ := approx.left_inverse x
   i_r_map := h
 
-def ValidRounder.toPartialRounderOfMapTo' {t : Set F} (approx : ValidRounder i r)
+def ValidRounder.toPartialRounderOfMapTo' {t : Set F} [approx : ValidRounder i r]
     (r_map : s.MapsTo r t) (i_map : t.MapsTo i s) : PartialRounder i r s :=
   approx.toPartialRounderOfMapTo (i_map.comp r_map)
 
-def ValidRounder.toPartialRounder (approx : ValidRounder i r) : PartialRounder i r .univ :=
+instance ValidRounder.toPartialRounder [approx : ValidRounder i r] : PartialRounder i r .univ :=
   approx.toPartialRounderOfMapTo (Set.mapsTo_univ _ _)
 
-def PartialRounder.toValidRounder (approx : PartialRounder i r .univ)
+def PartialRounder.toValidRounder [approx : PartialRounder i r .univ]
     (h : Function.Surjective r) : ValidRounder i r where
   r_mono := monotoneOn_univ.mp approx.r_mono
   i_mono := monotoneOn_univ.mp ((Set.image_univ_of_surjective h) ▸ approx.i_mono)
@@ -332,12 +331,12 @@ section
 variable {X : Type*} {F : Type*} [LinearOrder X] [PartialOrder F]
 variable {i : F → X} {r : X → F}
 
-theorem ValidRounder.mapsTo_Icc {a b : F} (approx : ValidRounder i r) :
+theorem ValidRounder.mapsTo_Icc {a b : F} [approx : ValidRounder i r] :
     Set.MapsTo r (Set.Icc (i a) (i b)) (Set.Icc a b) := by
   nth_rw 2 [<-approx.left_inverse a, <-approx.left_inverse b]
   exact approx.r_mono.mapsTo_Icc
 
-theorem ValidRounder.Icc {a b : F} (approx : ValidRounder i r) (h : a ≤ b) :
+theorem ValidRounder.Icc {a b : F} [approx : ValidRounder i r] (h : a ≤ b) :
     r '' (Set.Icc (i a) (i b)) = Set.Icc a b := by
   rw [@Set.image_eq_iff_surjOn_mapsTo]
   constructor
@@ -346,17 +345,17 @@ theorem ValidRounder.Icc {a b : F} (approx : ValidRounder i r) (h : a ≤ b) :
       (approx.i_mono h)
   exact approx.mapsTo_Icc
 
-theorem PartialRounder.r_le_f_of_x_le_f (approx : PartialRounder i r s) {x : X} {f : F}
+theorem PartialRounder.r_le_f_of_x_le_f [approx : PartialRounder i r s] {x : X} {f : F}
     (hx : x ∈ s) (hf : f ∈ r '' s) (h : x ≤ i f) : r x ≤ f :=
   approx.left_inverse hf ▸ approx.r_mono hx (approx.i_map hf) h
 
-theorem PartialRounder.mapsTo_Icc {a b : F} (approx : PartialRounder i r s)
+theorem PartialRounder.mapsTo_Icc {a b : F} [approx : PartialRounder i r s]
     (ha : a ∈ r '' s) (hb : b ∈ r '' s) (hs : Set.Icc (i a) (i b) ⊆ s) :
     Set.MapsTo r (Set.Icc (i a) (i b)) (Set.Icc a b) := by
   nth_rw 2 [<-approx.left_inverse ha, <-approx.left_inverse hb]
   exact (approx.r_mono.mono hs).mapsTo_Icc
 
-theorem PartialRounder.Icc_ofSurjOn {a b : F} (approx : PartialRounder i r s)
+theorem PartialRounder.Icc_ofSurjOn {a b : F} [approx : PartialRounder i r s]
     (h : Set.SurjOn r s .univ) (hs : Set.Icc (i a) (i b) ⊆ s)
     : r '' (Set.Icc (i a) (i b)) = (Set.Icc a b) := by
   let target : ∀{a}, a ∈ r '' s := fun {f} ↦ h (Set.mem_univ f)

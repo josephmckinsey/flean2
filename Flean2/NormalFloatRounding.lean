@@ -5,14 +5,14 @@ section
 
 variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
 
-def validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near where
+instance validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near where
   r_mono := round_near_monotone
   i_mono := Int.cast_mono
   left_inverse := round_near_leftInverse
 
 def round_near_e (e : ℤ) (x : X) : ℤ := round_near (x / 2^e)
 
-def validRounder_round_near_e (e : ℤ) :
+instance validRounder_round_near_e (e : ℤ) :
     ValidRounder (interp_e e (X := X)) (round_near_e e) :=
   validRounder_round_near.mul (by positivity)
 
@@ -27,13 +27,9 @@ def mantissaPartialRounder_round_near (e : ℤ) (prec : ℕ) :
     norm_cast
   ]
   have approx := validRounder_round_near_e e (X := X)
-  exact ValidRounder.toPartialRounderOfMapTo approx fun x xh ↦
+  exact ValidRounder.toPartialRounderOfMapTo fun x xh ↦
     ⟨approx.i_mono (approx.f_le_r_of_f_le_x xh.1),
     approx.i_mono (approx.r_le_f_of_x_le_f xh.2)⟩
-
-theorem round_near_image (a b : ℤ) (h : a ≤ b) :
-    round_near '' (Set.Icc (a : X) (b : X)) = Set.Icc a b :=
-  (validRounder_round_near (X := X)).Icc h
 
 theorem round_near_e_image (prec : ℕ) :
     (round_near_e e) '' (Set.Icc ((2 : X)^(prec + e)) (2^(prec + e + 1))) =
@@ -79,6 +75,7 @@ def round_near_all (prec : ℕ) := fun (x : X) ↦
   -- Normalization trims off the edge to [2^prec, 2^(prec + 1))
   normalize_edge prec ⟨round_near_e e x, e⟩
 
+-- TODO: Better name
 theorem round_near_e_mantissa (prec : ℕ) {x : X} (h : 0 < x) :
     2^prec ≤ (x / 2^(Int.log 2 x - prec)) ∧
     (x / 2^(Int.log 2 x - prec)) < 2^(prec+1) := by
@@ -157,7 +154,7 @@ theorem round_near_all_at_places (prec : ℕ) (e : ℤ) (x : X)
 -- [X] Minimum and maximum element lemmas
 -- [X] Gluing operations: binary and Σ based.
 -- [ ] Adding new bottom and top elements (not a priority, may be unnecessary)
--- [X] Bound with an interval
+-- [X] Bound with an interval [a, b]
 -- [ ] Fix todos
 -- [ ] Try bound tactic at each line
 
@@ -207,23 +204,18 @@ theorem interp_round_near_all_image (p : ℕ) {x : X} {i : ℤ}
   simp only [sub_add_cancel]
   exact h
 
--- TODO: clean up
-theorem round_normal_monoOn [Field X] [LinearOrder X]
-    [IsStrictOrderedRing X] [FloorRing X] (p : ℕ) :
+theorem round_normal_monoOn (p : ℕ) :
     MonotoneOn (round_near_normal p) (Set.Ioi (0 : X)) := by
   rw [Ioi_zero_eq_iUnion_Icc_zpow (b := (2 : X)) (by norm_num)]
   apply MonotoneOn.iUnion_lowerBound
     (t := fun e ↦ round_near_normal p '' Set.Icc ((2 : X)^e) (2^(e+1)))
   case s_mono =>
     apply zpow_lowerBounds
-  · intro i j h
-    have := zpow_lowerBounds h (X := X)
-    intro f ⟨x, xh⟩ f' ⟨y, yh⟩
-    rw [NormalNumber.le_def X]
-    rw [<-xh.2, <-yh.2]
-    apply this
-    · apply interp_round_near_all_image _ xh.1
-    apply interp_round_near_all_image _ yh.1
+  · intro i j h f ⟨x, xh⟩ f' ⟨y, yh⟩
+    rw [NormalNumber.le_def X, <-xh.2, <-yh.2]
+    exact zpow_lowerBounds h
+      (interp_round_near_all_image _ xh.1)
+      (interp_round_near_all_image _ yh.1)
   · intro i x xh y yh h
     rw [NormalNumber.le_def X]
     have xpos : 0 < x := lt_of_lt_of_le (by positivity) xh.1
@@ -233,12 +225,11 @@ theorem round_normal_monoOn [Field X] [LinearOrder X]
     exact (validRounder_round_near_e _).i_mono ((validRounder_round_near_e _).r_mono h)
   exact fun i ↦ Set.mapsTo_image (round_near_normal p) (Set.Icc (2 ^ i) (2 ^ (i + 1)))
 
-def partialRounder_round_near_normal [Field X] [LinearOrder X]
-    [IsStrictOrderedRing X] [FloorRing X] (p : ℕ) :
+def partialRounder_round_near_normal (p : ℕ) :
     PartialRounder (NormalNumber.interp X) (round_near_normal p) (Set.Ioi 0) where
   r_mono := round_normal_monoOn p
   i_mono := (NormalNumber.interp_strictMono X).monotone.monotoneOn _
   left_inverse := (round_normal_interp p).leftInvOn _
-  i_r_map := fun _ _  ↦ NormalNumber.interp_pos _ _
+  i_r_map _ _ := NormalNumber.interp_pos _ _
 
 end
