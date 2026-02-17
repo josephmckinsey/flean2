@@ -68,10 +68,7 @@ public lemma round_near_eq_of (x : X) (z : ℤ) (h1 : z - 2⁻¹ < x) (h2 : x < 
     replace h3 := lt_of_not_ge h3
     have floor_eq : ⌊x⌋ = z - 1 := by
       grind [Int.floor_add_one, Int.floor_eq_iff]
-    have fract_eq : Int.fract x = x - (z - 1) := by
-      rw [Int.fract]
-      suffices (⌊x⌋ : X) = z - 1 by linarith
-      norm_cast
+    have fract_eq : Int.fract x = x - (z - 1) := by simp [Int.fract, floor_eq]
     suffices z = ⌈x⌉ by grind [round_near]
     exact (Int.ceil_eq_iff.mpr ⟨by linarith, le_of_lt h3⟩).symm
 

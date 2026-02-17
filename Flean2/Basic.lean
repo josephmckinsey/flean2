@@ -264,18 +264,9 @@ def PartialRounder.ofMapTo {i : F → X} {r : X → F} {s : Set X} {t : Set F}
 
 def PartialRounder.restrict [approx : PartialRounder i r s] :
     ValidRounder approx.i_map.restrict approx.r_map.restrict where
-  r_mono := by
-    intro ⟨x, xh⟩ ⟨y, yh⟩
-    rw [Subtype.mk_le_mk, Subtype.mk_le_mk]
-    exact approx.r_mono xh yh
-  i_mono := by
-    intro ⟨x, xh⟩ ⟨y, yh⟩
-    rw [Subtype.mk_le_mk, Subtype.mk_le_mk]
-    exact approx.i_mono xh yh
-  left_inverse := by
-    intro ⟨x, xh⟩
-    rw [Subtype.mk.injEq]
-    exact approx.left_inverse xh
+  r_mono := fun ⟨_, xh⟩ ⟨_, yh⟩ h ↦ approx.r_mono xh yh h
+  i_mono := fun ⟨_, xh⟩ ⟨_, yh⟩ h ↦ approx.i_mono xh yh h
+  left_inverse := fun ⟨_, xh⟩ ↦ Subtype.ext (approx.left_inverse xh)
 
 def ValidRounder.toPartialRounderOfMapTo [approx : ValidRounder i r]
     (h : s.MapsTo (i ∘ r) s) : PartialRounder i r s where

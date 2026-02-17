@@ -18,18 +18,11 @@ instance validRounder_round_near_e (e : ℤ) :
 
 def mantissaPartialRounder_round_near (e : ℤ) (prec : ℕ) :
     PartialRounder (interp_e e) (round_near_e e)
-    (Set.Icc ((2 : X)^(prec + e)) (2^(prec + e + 1))) := by
-  rw [show (2 : X)^(prec + e) = (2^prec : ℤ) * (2 : X)^e by
-    rw [zpow_add₀ (by norm_num)]
-    simp,
-    show (2 : X)^(prec + e + 1) = (2^(prec + 1): ℤ) * (2 : X)^e by
-    rw [add_assoc, add_comm e 1, <-add_assoc, zpow_add₀ (by norm_num)]
-    norm_cast
-  ]
-  have approx := validRounder_round_near_e e (X := X)
-  exact ValidRounder.toPartialRounderOfMapTo fun x xh ↦
-    ⟨approx.i_mono (approx.f_le_r_of_f_le_x xh.1),
-    approx.i_mono (approx.r_le_f_of_x_le_f xh.2)⟩
+    (Set.Icc ((2 : X)^(e + prec)) (2^(e + prec + 1))) := by
+  rw [←interp_e_2pow, add_assoc, ←Int.natCast_add_one, ←interp_e_2pow]
+  have h := validRounder_round_near_e e (X := X)
+  exact h.toPartialRounderOfMapTo fun _ ⟨lo, hi⟩ ↦
+    ⟨h.i_mono (h.f_le_r_of_f_le_x lo), h.i_mono (h.r_le_f_of_x_le_f hi)⟩
 
 theorem round_near_e_image (prec : ℕ) :
     (round_near_e e) '' (Set.Icc ((2 : X)^(prec + e)) (2^(prec + e + 1))) =
@@ -88,11 +81,7 @@ theorem round_near_all_mantissa [NeZero (2 : X)] (prec : ℕ) {x : X} (h : 0 < x
   exact_mod_cast le_of_lt (round_near_e_mantissa prec h).2
 
 theorem round_near_e_zpow_eq (e : ℤ) (p : ℕ) : round_near_e e ((2 : X) ^ (e + p)) = 2^p :=
-  let i_eq : (2 : X) ^ (e + p) = interp_e e (2^p) := by
-    unfold interp_e
-    rw [add_comm]
-    simp [zpow_add₀]
-  i_eq ▸ (validRounder_round_near_e e).left_inverse _
+  (interp_e_2pow (X := X) e p).symm ▸ (validRounder_round_near_e e).left_inverse _
 
 theorem round_near_all_top_eq (p : ℕ) (e : ℤ)
     : interp_pair X (round_near_all p ((2 : X) ^ (e + ↑p + 1))) =
@@ -104,7 +93,7 @@ theorem round_near_all_top_eq (p : ℕ) (e : ℤ)
     rw [x_def, show (2 : X) = ((2 : ℕ) : X) by norm_num,
       Int.log_zpow (b := 2) (by norm_num)]
     ring
-  rw [this, x_def, add_assoc, add_comm (p : ℤ) 1, <-add_assoc]
+  rw [this, x_def, add_assoc, add_comm (p : ℤ) 1, ← add_assoc]
   rw_mod_cast [round_near_e_zpow_eq (e + 1) p]
   norm_cast
 
