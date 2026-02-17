@@ -8,7 +8,6 @@ import Mathlib.Analysis.Normed.Module.Basic
 import Mathlib.Algebra.Order.Floor.Div
 import Mathlib.Data.Int.Log
 import Mathlib.Order.Interval.Set.SurjOn
-import Flean2.RoundNearest
 import Flean2.MathlibLemmas
 
 section
