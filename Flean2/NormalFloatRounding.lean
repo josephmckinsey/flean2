@@ -36,13 +36,7 @@ theorem round_near_e_image (prec : ℕ) :
     Set.Icc (2^prec) (2^(prec + 1)) := by
   suffices round_near_e (X := X) e ''
       Set.Icc (interp_e e (2 ^ prec)) (interp_e e (2 ^ (prec + 1))) =
-      Set.Icc (2 ^ prec) (2 ^ (prec + 1)) by
-    rw [interp_e, interp_e] at this
-    convert this
-    · simp [Int.cast_pow, zpow_add₀]
-    rw [zpow_add_one₀ (by norm_num), zpow_add₀ (by norm_num), pow_succ]
-    field_simp
-    norm_cast
+      Set.Icc (2 ^ prec) (2 ^ (prec + 1)) by grind
   exact (validRounder_round_near_e e).Icc (pow_le_pow_right₀ (by norm_num) (by linarith))
 
 def normalize_edge (prec : ℕ) : ℤ × ℤ → ℤ × ℤ := fun ⟨m, e⟩ ↦
@@ -50,13 +44,7 @@ def normalize_edge (prec : ℕ) : ℤ × ℤ → ℤ × ℤ := fun ⟨m, e⟩ �
 
 theorem normalize_edge_cast_comm [Field k] [NeZero (2 : k)] (prec : ℕ)
     (f : ℤ × ℤ) : (interp_pair k (normalize_edge prec f)) = interp_pair k f := by
-  unfold normalize_edge interp_pair
-  if h : f.1 = 2^(prec + 1) then
-    simp only [h, reduceIte, Int.cast_pow, Int.cast_ofNat]
-    rw [pow_add, zpow_add₀ two_ne_zero]
-    field_simp
-  else
-    simp_rw [if_neg h]
+  grind [normalize_edge]
 
 theorem normalize_edge_narrows_prec_upper [Field k] [CharZero k] (prec : ℕ)
     {f : ℤ × ℤ} (h : f.1 ≤ 2 ^ (prec + 1)) : (normalize_edge prec f).1 < 2^(prec+1) := by
@@ -79,19 +67,14 @@ def round_near_all (prec : ℕ) := fun (x : X) ↦
 theorem round_near_e_mantissa (prec : ℕ) {x : X} (h : 0 < x) :
     2^prec ≤ (x / 2^(Int.log 2 x - prec)) ∧
     (x / 2^(Int.log 2 x - prec)) < 2^(prec+1) := by
-  set y := x / 2^(Int.log 2 x - prec) with y_def
-  rw [sub_eq_add_neg, div_eq_mul_inv, <-zpow_neg, neg_add_rev, neg_neg,
-    zpow_add₀ (by norm_num), mul_comm, mul_assoc, mul_comm _ x, zpow_neg] at y_def
-  have rhs : x * (2^(Int.log 2 x))⁻¹ < 2 := by
-    rw [mul_inv_lt_iff₀ (by positivity), mul_comm,
-      <-zpow_add_one₀ (by norm_num)]
-    exact Int.lt_zpow_succ_log_self (by norm_num) x
-  have lhs : 1 ≤ x * (2^(Int.log 2 x))⁻¹ := by
-    rw [le_mul_inv_iff₀ (by positivity), mul_comm, mul_one]
-    apply Int.zpow_log_le_self (by norm_num) h
-  suffices 1 ≤ x * (2^(Int.log 2 x))⁻¹ ∧ x * (2^(Int.log 2 x))⁻¹ < 2 by
-    simpa [pow_succ, y_def]
-  exact ⟨lhs, rhs⟩
+  constructor
+  · rw [le_div_iff₀ (by positivity), ←zpow_natCast (2 : X) prec, ←zpow_add₀ two_ne_zero]
+    convert Int.zpow_log_le_self (b := 2) (by norm_num) h using 2
+    ring
+  · rw [div_lt_iff₀ (by positivity), ←zpow_natCast (2 : X) (prec + 1), ←zpow_add₀ two_ne_zero]
+    convert Int.lt_zpow_succ_log_self (b := 2) (by norm_num) x using 2
+    simp only [Nat.cast_add, Nat.cast_one]
+    ring
 
 
 theorem round_near_all_mantissa [NeZero (2 : X)] (prec : ℕ) {x : X} (h : 0 < x) :
@@ -131,16 +114,13 @@ theorem round_near_all_at_places (prec : ℕ) (e : ℤ) (x : X)
   by_cases x_eq : x = 2^(e + prec + 1)
   · rw [x_eq, add_assoc]
     rw_mod_cast [round_near_e_zpow_eq (X := X) e (prec + 1 )]
-    rw [Nat.cast_add, Nat.cast_one, <-add_assoc, round_near_all_top_eq,
-      interp_pair,interp_e, pow_succ, zpow_add_one₀ (by norm_num)]
-    field_simp
-    norm_cast
+    rw [Nat.cast_add, Nat.cast_one, <-add_assoc, round_near_all_top_eq]
+    grind
   have xpos : 0 < x := lt_of_lt_of_le (by positivity) h.1
   have : Int.log 2 x = e + prec := by
     rw [Int.log_eq_iff (by norm_num) xpos]
     exact ⟨h.1, lt_of_le_of_ne h.2 x_eq⟩
   rw [round_near_all, normalize_edge_cast_comm, this, add_sub_cancel_right]
-  rfl
 
 -- TODO: Do we need IsRoundUpOn and IsRoundDownOn?
 -- TODO: Do we need that gluing preserves IsRoundUp and IsRoundDown?
@@ -171,7 +151,7 @@ def round_near_normal (p : ℕ) (x : X) : NormalNumber p :=
 theorem round_near_normal_eq (p : ℕ) {x : X} (h : 0 < x) :
     (round_near_normal p x).interp X = interp_pair X (round_near_all p x) := by
   -- I love you grind
-  grind [NormalNumber.interp, round_near_normal]
+  grind [NormalNumber.interp, interp_e, round_near_normal]
 
 theorem round_normal_interp (p : ℕ) :
     Function.LeftInverse (round_near_normal p) (NormalNumber.interp X) := by
@@ -186,21 +166,10 @@ theorem interp_round_near_all_image (p : ℕ) {x : X} {i : ℤ}
     (round_near_normal p x).interp X ∈ Set.Icc (2 ^ i) (2 ^ (i + 1)) := by
   have xpos : 0 < x := lt_of_lt_of_le (by positivity) h.1
   rw [round_near_normal_eq _ xpos, round_near_all_at_places p (i - p)]
-  · have : round_near_e (i - p) x ∈ Set.Icc (2 ^ p) (2 ^ (p + 1)) := by
+  · have hm : round_near_e (i - p) x ∈ Set.Icc (2 ^ p) (2 ^ (p + 1)) := by
       rw [<-round_near_e_image (e := i - p) p (X := X)]
-      use x
-      simpa
-    rw [interp_e]
-    set m := round_near_e (i - p) x
-    -- There's _some_ overlap here with interp_bound
-    constructor
-    · rw [zpow_sub₀ (by norm_num), mul_div, le_div_iff₀' (by positivity)]
-      apply (mul_le_mul_iff_left₀ (by positivity)).mpr
-      exact_mod_cast this.1
-    rw [zpow_sub₀ (by norm_num), mul_div, div_le_iff₀' (by positivity),
-      add_comm, zpow_add₀ (by positivity), <-mul_assoc, <-zpow_add₀ (by positivity)]
-    apply (mul_le_mul_iff_left₀ (by positivity)).mpr
-    exact_mod_cast this.2
+      exact ⟨x, by simpa⟩
+    convert interp_e_Icc (X := X) (i - p) hm <;> simp
   simp only [sub_add_cancel]
   exact h
 
