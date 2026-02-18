@@ -1,3 +1,5 @@
+import Mathlib.Algebra.Group.Pointwise.Set.Scalar  -- for SMul α (Set β)
+import Mathlib.Algebra.Order.Field.Pointwise
 import Flean2.Basic
 import Flean2.NormalFloat
 import Flean2.RoundNearest
@@ -196,6 +198,16 @@ def partialRounder_round_normal (p : ℕ) :
   left_inverse := (round_normal_interp p).leftInvOn _
   i_r_map _ _ := NormalNumber.interp_pos _ _
 
+open Pointwise in
+theorem round_normal_error_mem {S : Set X} (hr : ∀ x : X, ↑(r x) - x ∈ S)
+    (p : ℕ) {x : X} (hx : 0 < x) : (round_normal r p x).interp X - x ∈ ulp p x • S := by
+  rw [round_normal_eq p hx, round_all, ulp, normalize_edge_cast_comm, interp_pair,
+    interp_e, rounder_e, Set.mem_smul_set]
+  set e := Int.log 2 x - p
+  refine ⟨↑(r (x / 2 ^ e)) - x / 2 ^ e, hr (x / 2^e), ?_⟩
+  rw [smul_eq_mul]
+  field_simp
+
 end
 
 /-! ## Concrete instances for specific rounders -/
@@ -209,13 +221,51 @@ instance validRounder_round_near : ValidRounder ((↑) : ℤ → X) round_near w
   i_mono := Int.cast_mono
   left_inverse := round_near_leftInverse
 
-/-- Round to nearest, scaling by 2^e. -/
-abbrev round_near_e (e : ℤ) : X → ℤ := rounder_e round_near e
-
-/-- Round a positive real to a NormalNumber using round-to-nearest. -/
 abbrev round_near_normal (p : ℕ) : X → NormalNumber p := round_normal round_near p
 
-/-- Round a positive real to a (mantissa, exponent) pair using round-to-nearest. -/
-abbrev round_near_all (p : ℕ) : X → ℤ × ℤ := round_all round_near p
+/-- For positive x, rounding down gives an interpretation ≤ x. -/
+theorem round_near_normal_error (p : ℕ) {x : X} (hx : 0 < x) :
+    (round_near_normal p x).interp X - x ∈ Set.Icc (-2⁻¹ * ulp p x) (2⁻¹ * ulp p x) := by
+  convert (LinearOrderedField.smul_Icc (a := -2⁻¹) (b := 2⁻¹) (ulp_pos p x)) ▸
+    round_normal_error_mem round_near_le p hx using 1
+  field_simp
 
 end RoundNear
+
+section RoundEdges
+
+variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
+
+instance validRounder_floor : ValidRounder ((↑) : ℤ → X) Int.floor := ValidRounder.ofFloor
+
+/-- Round a positive real to a NormalNumber using round-toward-negative-infinity. -/
+abbrev round_floor_normal (p : ℕ) : X → NormalNumber p := round_normal Int.floor p
+
+def floor_error (x : X) : ↑⌊x⌋ - x ∈ Set.Ioc (-1) 0 := by
+  grind [Int.sub_one_lt_floor, Int.floor_le]
+
+/-- For positive x, rounding down gives an interpretation ≤ x. -/
+theorem round_floor_normal_error (p : ℕ) {x : X} (hx : 0 < x) :
+    (round_floor_normal p x).interp X - x ∈ Set.Ioc (-ulp p x) 0 := by
+  convert (LinearOrderedField.smul_Ioc (a := -1) (b := 0) (ulp_pos p x)) ▸
+    round_normal_error_mem floor_error p hx using 1
+  simp
+
+variable {X : Type*} [Field X] [LinearOrder X] [FloorRing X] [IsStrictOrderedRing X]
+
+instance validRounder_ceil : ValidRounder ((↑) : ℤ → X) Int.ceil := ValidRounder.ofCeil
+
+/-- Round a positive real to a NormalNumber using round-toward-infinity. -/
+abbrev round_ceil_normal (p : ℕ) : X → NormalNumber p := round_normal Int.ceil p
+
+def ceil_error (x : X) : ↑⌈x⌉ - x ∈ Set.Ico 0 1 := by
+  grind [Int.ceil_lt_add_one, Int.le_ceil]
+
+/-- For positive x, rounding up gives an interpretation ≥ x. -/
+theorem round_ceil_normal_error (p : ℕ) {x : X} (hx : 0 < x) :
+    (round_ceil_normal p x).interp X - x ∈ Set.Ico 0 (ulp p x) := by
+  convert (LinearOrderedField.smul_Ico (a := 0) (b := 1) (ulp_pos p x)) ▸
+    round_normal_error_mem ceil_error p hx using 1
+  simp
+
+end RoundEdges

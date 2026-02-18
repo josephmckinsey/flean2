@@ -77,10 +77,9 @@ lemma fract_eq_ceil_of_pos {q : X} (h : 0 < Int.fract q) :
   grind [Int.fract_eq_zero_or_add_one_sub_ceil]
 
 public lemma round_near_le (q : X) :
-  |round_near q - q| ≤ 1/2 := by
+  -2⁻¹ ≤ round_near q - q ∧ (round_near q - q) ≤ 2⁻¹ := by
   unfold round_near
-  grind only [abs_sub_comm, abs_of_nonneg, fract_eq_ceil_of_pos, !Int.fract_nonneg,
-    !Int.le_ceil, !Int.self_sub_floor]
+  grind only [fract_eq_ceil_of_pos, !Int.fract_nonneg, !Int.le_ceil, !Int.self_sub_floor]
 
 public lemma round_near_leftInverse : Function.LeftInverse round_near ((↑) : ℤ → X) :=
   fun x => by simp [round_near, Int.fract_intCast]

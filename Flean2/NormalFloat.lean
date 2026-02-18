@@ -51,6 +51,7 @@ theorem NormalNumber.interp_e_proj [Field X] {f : NormalNumber p} :
     f.interp X = interp_e f.e f.m := by
   simp [interp_e, interp]
 
+@[simp]
 theorem NormalNumber.log2_interp {p : ℕ} (X : Type*) [Field X] [LinearOrder X]
     [IsStrictOrderedRing X] [FloorRing X] (f : NormalNumber p) :
     Int.log 2 (f.interp X) = f.e + p := by
@@ -91,3 +92,18 @@ theorem NormalNumber.interp_strictMono (X : Type*)
   Monotone.strictMono_of_injective
     (fun x y h ↦ (le_def X x y).mp h)
     (interp_injective X)
+
+def ulp [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X]
+    (p : ℕ) (x : X) : X := 2^(Int.log 2 x - p)
+
+theorem ulp_pos [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X]
+    (p : ℕ) (x : X) : 0 < ulp p x := by unfold ulp; positivity
+
+def NormalNumber.ulp [Field X] {p : ℕ} (f : NormalNumber p) : X := 2^f.e
+
+theorem NormalNumber.ulp_pos [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X]
+    {p : ℕ} (f : NormalNumber p) : (0 : X) < f.ulp := by unfold ulp; positivity
+
+theorem ulp_interp [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X]
+    {p : ℕ} (f : NormalNumber p) : ulp p (f.interp X) = f.ulp := by
+  simp [ulp, NormalNumber.ulp]
