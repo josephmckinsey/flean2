@@ -72,25 +72,26 @@ instance : PartialOrder (NormalNumber p) where
   le x y := x.interp ℚ ≤ y.interp ℚ
   le_refl := by simp
   le_trans _ _ _ ha hb := le_trans ha hb
-  le_antisymm a b ha hb := NormalNumber.interp_injective ℚ
-    (le_antisymm ha hb)
+  le_antisymm a b ha hb := NormalNumber.interp_injective ℚ (le_antisymm ha hb)
 
+@[grind =]
 theorem NormalNumber.interp_X_rat (X : Type*)
     [Field X] [LinearOrder X] [IsStrictOrderedRing X]
     (f : NormalNumber p) : (interp ℚ f : X) = interp X f := by
   simp [interp]
 
+@[grind =_]
 theorem NormalNumber.le_def (X : Type*)
     [Field X] [LinearOrder X] [IsStrictOrderedRing X]
-    (f1 f2 : NormalNumber p) : f1 <= f2 ↔ f1.interp X <= f2.interp X := by
-  change f1.interp ℚ <= f2.interp ℚ ↔ f1.interp X <= f2.interp X
+    {f1 f2 : NormalNumber p} : f1 ≤ f2 ↔ f1.interp X ≤ f2.interp X := by
+  change f1.interp ℚ ≤ f2.interp ℚ ↔ f1.interp X ≤ f2.interp X
   rw [<-f1.interp_X_rat X, <- f2.interp_X_rat X, Rat.cast_le]
 
 theorem NormalNumber.interp_strictMono (X : Type*)
     [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X] :
     StrictMono (NormalNumber.interp X (p := p)) :=
   Monotone.strictMono_of_injective
-    (fun x y h ↦ (le_def X x y).mp h)
+    (fun _ _ h ↦ (le_def X).mp h)
     (interp_injective X)
 
 def ulp [Field X] [LinearOrder X] [IsStrictOrderedRing X] [FloorRing X]
